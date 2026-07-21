@@ -91,10 +91,9 @@ fun SmartHomeNavHost() {
             composable(
                 route = Routes.FLOOR_PLAN_GRID,
                 arguments = listOf(navArgument("floorPlanId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val floorPlanId = backStackEntry.arguments?.getString("floorPlanId") ?: return@composable
+            ) {
                 FloorPlanGridScreen(
-                    floorPlanId = floorPlanId,
+                    floorPlanId = it.arguments?.getString("floorPlanId") ?: "",
                     onBack = { navController.navigateUp() }
                 )
             }
