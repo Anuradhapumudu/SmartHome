@@ -85,8 +85,9 @@ fun DeviceDetailSheet(
             OutlinedButton(
                 onClick = { showDeleteConfirm = true },
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusError),
-                border = ButtonDefaults.outlinedButtonBorder.copy(
-                    brush = androidx.compose.ui.graphics.SolidColor(StatusError.copy(alpha = 0.5f))
+                border = androidx.compose.foundation.BorderStroke(
+                    width = 1.dp,
+                    color = StatusError.copy(alpha = 0.5f)
                 ),
                 modifier = Modifier.fillMaxWidth()
             ) {
@@ -460,10 +461,9 @@ private fun BigToggleButton(isOn: Boolean, onToggle: () -> Unit) {
         colors = ButtonDefaults.buttonColors(
             containerColor = if (isOn) StatusOn.copy(alpha = 0.2f) else SurfaceVariantDark
         ),
-        border = ButtonDefaults.outlinedButtonBorder.copy(
-            brush = androidx.compose.ui.graphics.SolidColor(
-                if (isOn) StatusOn else OnSurfaceVariant.copy(alpha = 0.3f)
-            )
+        border = androidx.compose.foundation.BorderStroke(
+            width = 1.dp,
+            color = if (isOn) StatusOn else OnSurfaceVariant.copy(alpha = 0.3f)
         ),
         shape = RoundedCornerShape(50.dp),
         contentPadding = PaddingValues(horizontal = 40.dp, vertical = 16.dp)
