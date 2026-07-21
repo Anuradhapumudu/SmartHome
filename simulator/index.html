@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Smart Home — Hardware Simulator</title>
+  <meta name="description" content="Real-time hardware simulator dashboard for the Smart Home system. Mirrors Firestore device state and allows remote toggling." />
+
+  <!-- Google Font: Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- Firebase JS SDK v10 (ESM via CDN) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import {
+      getFirestore,
+      collection,
+      onSnapshot,
+      doc,
+      updateDoc,
+      query,
+      orderBy,
+      limit,
+      serverTimestamp,
+      addDoc,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+    // ── Firebase config (same project as the Android app) ─────────────────
+    const firebaseConfig = {
+      apiKey: "AIzaSyDPHNeQf1wtUJbrhwYErM9B8Fb1_6hAXts",
+      authDomain: "smarthome-59f93.firebaseapp.com",
+      projectId: "smarthome-59f93",
+      storageBucket: "smarthome-59f93.firebasestorage.app",
+      messagingSenderId: "222606962623",
+      appId: "1:222606962623:android:42d0acefc10e6281f77b0a",
+    };
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    // ── App state ──────────────────────────────────────────────────────────
+    let floorPlans = [];
+    let activePlanId = null;
+    let devices = [];
+    let deviceUnsub = null;
+    let alertUnsub = null;
+
+    // ── DOM refs (populated after DOMContentLoaded) ────────────────────────
+    let sidebarList, gridContainer, headerTitle, headerSub, alertBanner, alertMsg;
+    let logsContainer;
+
+    // ── Utility: format HH:mm timestamp ────────────────────────────────────
+    function fmtTime(ts) {
+      if (!ts) return "";
+      const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+      return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+    }
+    function fmtDateTime(ts) {
+      if (!ts) return "";
+      const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
+      return d.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "medium" });
+    }
+
+    // ── Render sidebar floor plan list ─────────────────────────────────────
+    function renderSidebar() {
+      sidebarList.innerHTML = "";
+      if (floorPlans.length === 0) {
+        sidebarList.innerHTML = `<div class="empty-sidebar">No floor plans yet.<br/>Add one from the Android app.</div>`;
+        return;
+      }
+      floorPlans.forEach((plan) => {
+        const el = document.createElement("div");
+        el.className = "sidebar-item" + (plan.id === activePlanId ? " active" : "");
+        el.innerHTML = `
+          <span class="sidebar-icon">🏠</span>
+          <span class="sidebar-label">${escHtml(plan.name)}</span>
+        `;
+        el.addEventListener("click", () => selectPlan(plan.id, plan.name));
+        sidebarList.appendChild(el);
+      });
+    }
+
+    // ── Select a floor plan ────────────────────────────────────────────────
+    function selectPlan(planId, planName) {
+      activePlanId = planId;
+      headerTitle.textContent = planName;
+      headerSub.textContent = "Loading devices…";
+      renderSidebar();
+      subscribeToDevices(planId);
+    }
+
+    // ── Subscribe to devices for the active plan ───────────────────────────
+    function subscribeToDevices(planId) {
+      if (deviceUnsub) deviceUnsub();
+      deviceUnsub = onSnapshot(
+        collection(db, "floorPlans", planId, "devices"),
+        (snap) => {
+          devices = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          headerSub.textContent = `${devices.length} device${devices.length !== 1 ? "s" : ""}`;
+          renderGrid();
+        },
+        (err) => console.error("devices listener error:", err)
+      );
+    }
+
+    // ── Render 8×8 grid ───────────────────────────────────────────────────
+    function renderGrid() {
+      gridContainer.innerHTML = "";
+      const COLS = 8;
+      const ROWS = 8;
+      const deviceMap = {};
+      devices.forEach((d) => { deviceMap[`${d.gridX},${d.gridY}`] = d; });
+
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const key = `${c},${r}`;
+          const device = deviceMap[key];
+          const cell = document.createElement("div");
+          cell.className = "grid-cell" + (device ? " has-device" : "");
+          if (device) {
+            cell.dataset.deviceId = device.id;
+            cell.title = device.name;
+            cell.innerHTML = buildCellHTML(device);
+            cell.addEventListener("click", () => toggleDevice(device));
+          }
+          gridContainer.appendChild(cell);
+        }
+      }
+    }
+
+    // ── Build device cell HTML ─────────────────────────────────────────────
+    const ICONS = {
+      OUTLET: "🔌",
+      MULTI_SWITCH: "🔀",
+      IRON: "🔥",
+      LIGHT: "💡",
+      CAMERA: "📷",
+    };
+
+    function buildCellHTML(device) {
+      const icon = ICONS[device.type] || "❓";
+      const statusClass = (device.status || "OFF").toLowerCase();
+      const name = device.name.length > 8 ? device.name.slice(0, 7) + "…" : device.name;
+      return `
+        <div class="cell-inner status-${statusClass}">
+          <div class="cell-icon">${icon}</div>
+          <div class="cell-name">${escHtml(name)}</div>
+          <div class="cell-badge status-badge-${statusClass}">${device.status || "OFF"}</div>
+        </div>
+      `;
+    }
+
+    // ── Toggle a device (writes to Firestore) ─────────────────────────────
+    async function toggleDevice(device) {
+      if (!activePlanId) return;
+      const newStatus = device.status === "ON" ? "OFF" : "ON";
+      const updates = { status: newStatus };
+      if (device.type === "IRON" && newStatus === "ON") {
+        updates.lastTurnedOnAt = serverTimestamp();
+      }
+      try {
+        await updateDoc(
+          doc(db, "floorPlans", activePlanId, "devices", device.id),
+          updates
+        );
+        // Write usage log
+        await addDoc(collection(db, "usageLogs"), {
+          deviceId: device.id,
+          deviceName: device.name || "",
+          floorPlanId: activePlanId,
+          floorPlanName: floorPlans.find((p) => p.id === activePlanId)?.name || "",
+          event: newStatus,
+          timestamp: serverTimestamp(),
+        });
+      } catch (err) {
+        console.error("Toggle failed:", err);
+        showAlert("⚠ Toggle failed: " + err.message, "error");
+      }
+    }
+
+    // ── Subscribe to recent usage logs (for alert banner + log panel) ──────
+    function subscribeToLogs() {
+      const q = query(
+        collection(db, "usageLogs"),
+        orderBy("timestamp", "desc"),
+        limit(50)
+      );
+      alertUnsub = onSnapshot(q, (snap) => {
+        const logs = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        renderLogs(logs);
+        // Show alert banner if latest event is CUTOFF
+        const latest = logs[0];
+        if (latest && latest.event === "CUTOFF") {
+          const ago = latest.timestamp
+            ? fmtDateTime(latest.timestamp)
+            : "just now";
+          showAlert(
+            `🔥 Iron Safety Cutoff: "${latest.deviceName || "device"}" was auto-switched OFF at ${ago}`,
+            "cutoff"
+          );
+        }
+      });
+    }
+
+    function renderLogs(logs) {
+      logsContainer.innerHTML = "";
+      if (logs.length === 0) {
+        logsContainer.innerHTML = `<div class="log-empty">No events yet — toggle a device to start.</div>`;
+        return;
+      }
+      logs.forEach((log) => {
+        const el = document.createElement("div");
+        el.className = "log-entry event-" + log.event.toLowerCase().replace("_", "-");
+        el.innerHTML = `
+          <span class="log-icon">${eventIcon(log.event)}</span>
+          <span class="log-body">
+            <strong>${escHtml(log.deviceName || "unknown")}</strong>
+            <span class="log-badge badge-${log.event.toLowerCase().replace("_","-")}">${escHtml(log.event)}</span>
+            <br/>
+            <small>${escHtml(log.floorPlanName || "")}</small>
+          </span>
+          <span class="log-time">${fmtDateTime(log.timestamp)}</span>
+        `;
+        logsContainer.appendChild(el);
+      });
+    }
+
+    function eventIcon(ev) {
+      if (ev.includes("CUTOFF")) return "⚠️";
+      if (ev.includes("SCHEDULE")) return "⏰";
+      if (ev.includes("ON")) return "🟢";
+      return "⚫";
+    }
+
+    // ── Alert banner ───────────────────────────────────────────────────────
+    function showAlert(msg, type) {
+      alertBanner.className = "alert-banner visible alert-" + type;
+      alertMsg.textContent = msg;
+      if (type !== "cutoff") {
+        setTimeout(() => { alertBanner.className = "alert-banner"; }, 5000);
+      }
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    }
+
+    // ── Init ───────────────────────────────────────────────────────────────
+    document.addEventListener("DOMContentLoaded", () => {
+      sidebarList = document.getElementById("sidebar-list");
+      gridContainer = document.getElementById("grid");
+      headerTitle = document.getElementById("header-title");
+      headerSub = document.getElementById("header-sub");
+      alertBanner = document.getElementById("alert-banner");
+      alertMsg = document.getElementById("alert-msg");
+      logsContainer = document.getElementById("logs-container");
+
+      document.getElementById("alert-close").addEventListener("click", () => {
+        alertBanner.className = "alert-banner";
+      });
+
+      // Subscribe to floor plans
+      onSnapshot(
+        query(collection(db, "floorPlans"), orderBy("createdAt", "asc")),
+        (snap) => {
+          floorPlans = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+          renderSidebar();
+          // Auto-select first plan
+          if (floorPlans.length > 0 && !activePlanId) {
+            selectPlan(floorPlans[0].id, floorPlans[0].name);
+          } else if (floorPlans.length === 0) {
+            headerTitle.textContent = "No floor plans";
+            headerSub.textContent = "Add a floor plan from the Android app";
+            gridContainer.innerHTML = `<div class="grid-empty">Add a floor plan from the Android app to begin.</div>`;
+          }
+        },
+        (err) => console.error("floorPlans listener error:", err)
+      );
+
+      subscribeToLogs();
+    });
+  </script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:          #0A0E12;
+      --surface:     #111820;
+      --surface2:    #1C2630;
+      --card:        #162028;
+      --teal:        #00BCD4;
+      --teal-light:  #4DD0E1;
+      --teal-dim:    #002B2E;
+      --amber:       #FFC107;
+      --on-surface:  #E0F7FA;
+      --on-muted:    #80DEEA;
+      --green:       #00E676;
+      --red:         #FF5252;
+      --grey:        #546E7A;
+      --radius:      14px;
+      --font:        'Inter', system-ui, sans-serif;
+    }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--on-surface);
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Top bar ─────────────────────────────────────────────────────────── */
+    .topbar {
+      background: var(--surface);
+      border-bottom: 1px solid rgba(0,188,212,0.15);
+      padding: 0 24px;
+      height: 60px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-shrink: 0;
+      position: relative;
+    }
+    .topbar::before {
+      content: "";
+      position: absolute;
+      top: 0; left: 0; right: 0; height: 2px;
+      background: linear-gradient(90deg, #00BCD4, #4DD0E1, transparent);
+    }
+    .topbar-accent { width: 3px; height: 34px; background: var(--teal); border-radius: 2px; }
+    .topbar-brand { line-height: 1.2; }
+    .topbar-brand .name { font-size: 1rem; font-weight: 800; color: var(--teal); }
+    .topbar-brand .sub { font-size: .7rem; color: var(--on-muted); }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+    .live-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green);
+      box-shadow: 0 0 6px var(--green);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:.5;transform:scale(1.3)} }
+    .live-label { font-size: .75rem; color: var(--on-muted); }
+
+    /* ── Alert banner ────────────────────────────────────────────────────── */
+    .alert-banner {
+      display: none;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 20px;
+      font-size: .82rem;
+      font-weight: 600;
+      flex-shrink: 0;
+    }
+    .alert-banner.visible { display: flex; }
+    .alert-cutoff { background: rgba(255,82,82,0.2); border-bottom: 1px solid rgba(255,82,82,0.4); color: #FF5252; }
+    .alert-error   { background: rgba(255,140,0,.2);  border-bottom: 1px solid rgba(255,140,0,.4);  color: #FFA726; }
+    .alert-close { margin-left: auto; cursor: pointer; font-size: 1.1rem; opacity: .7; }
+    .alert-close:hover { opacity: 1; }
+
+    /* ── Layout ──────────────────────────────────────────────────────────── */
+    .layout {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ─────────────────────────────────────────────────────────── */
+    .sidebar {
+      width: 220px;
+      background: var(--surface);
+      border-right: 1px solid rgba(0,188,212,0.1);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+      overflow-y: auto;
+    }
+    .sidebar-header {
+      padding: 16px 18px 10px;
+      font-size: .65rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--on-muted);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+    }
+    .sidebar-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      cursor: pointer;
+      font-size: .85rem;
+      color: var(--on-muted);
+      border-left: 3px solid transparent;
+      transition: background .15s, color .15s;
+    }
+    .sidebar-item:hover { background: rgba(0,188,212,.07); color: var(--on-surface); }
+    .sidebar-item.active { background: rgba(0,188,212,.12); color: var(--teal); border-left-color: var(--teal); font-weight: 600; }
+    .sidebar-icon { font-size: 1rem; }
+    .empty-sidebar { padding: 20px 18px; font-size: .8rem; color: var(--on-muted); line-height: 1.5; }
+
+    /* ── Main area ───────────────────────────────────────────────────────── */
+    .main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .main-header {
+      padding: 14px 24px 12px;
+      background: var(--surface);
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      flex-shrink: 0;
+    }
+    .main-header h1 { font-size: 1.1rem; font-weight: 700; color: var(--teal); }
+    .main-header p  { font-size: .75rem; color: var(--on-muted); margin-top: 2px; }
+
+    /* Legend */
+    .legend {
+      display: flex;
+      gap: 18px;
+      padding: 8px 24px;
+      background: var(--bg);
+      border-bottom: 1px solid rgba(255,255,255,0.04);
+      flex-shrink: 0;
+    }
+    .legend-item { display: flex; align-items: center; gap: 5px; font-size: .7rem; color: var(--on-muted); }
+    .legend-dot  { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-on   { background: var(--green); }
+    .dot-off  { background: var(--grey); }
+    .dot-err  { background: var(--red); }
+    .dot-disc { background: #BDBDBD; }
+
+    /* Grid + logs split */
+    .content-split {
+      flex: 1;
+      display: flex;
+      overflow: hidden;
+      gap: 0;
+    }
+
+    /* Grid panel */
+    .grid-panel {
+      flex: 1;
+      padding: 16px 24px;
+      overflow-y: auto;
+    }
+    .grid-empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+      color: var(--on-muted);
+      font-size: .9rem;
+      text-align: center;
+    }
+
+    /* 8×8 grid */
+    #grid {
+      display: grid;
+      grid-template-columns: repeat(8, 1fr);
+      gap: 4px;
+      width: 100%;
+      max-width: 560px;
+    }
+    .grid-cell {
+      aspect-ratio: 1;
+      background: var(--card);
+      border: 1px solid rgba(128,222,234,0.07);
+      border-radius: 10px;
+      transition: background .15s;
+    }
+    .grid-cell.has-device {
+      cursor: pointer;
+      border-color: rgba(0,188,212,0.2);
+    }
+    .grid-cell.has-device:hover { background: rgba(0,188,212,0.08); }
+    .cell-inner {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 2px;
+      padding: 4px;
+      border-radius: 10px;
+      transition: background .2s;
+    }
+    .cell-icon  { font-size: 1.1rem; line-height: 1; }
+    .cell-name  { font-size: .55rem; color: var(--on-muted); text-align: center; overflow: hidden; white-space: nowrap; max-width: 100%; }
+    .cell-badge { font-size: .45rem; font-weight: 700; border-radius: 50px; padding: 1px 5px; }
+    .status-on       { background: rgba(0,230,118,.12); }
+    .status-off      { background: transparent; }
+    .status-error    { background: rgba(255,82,82,.12); }
+    .status-disconnected { background: rgba(189,189,189,.08); }
+    .status-badge-on          { background: rgba(0,230,118,.2); color: #00E676; }
+    .status-badge-off         { background: rgba(84,110,122,.2); color: #90A4AE; }
+    .status-badge-error       { background: rgba(255,82,82,.2);  color: #FF5252; }
+    .status-badge-disconnected{ background: rgba(189,189,189,.15); color: #BDBDBD; }
+
+    /* Log panel */
+    .log-panel {
+      width: 300px;
+      border-left: 1px solid rgba(0,188,212,0.1);
+      background: var(--surface);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .log-panel-header {
+      padding: 12px 16px;
+      font-size: .7rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--on-muted);
+      border-bottom: 1px solid rgba(255,255,255,.05);
+      flex-shrink: 0;
+    }
+    #logs-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 0;
+    }
+    .log-entry {
+      display: grid;
+      grid-template-columns: 22px 1fr auto;
+      gap: 8px;
+      align-items: start;
+      padding: 9px 14px;
+      border-bottom: 1px solid rgba(255,255,255,.03);
+      font-size: .75rem;
+    }
+    .log-entry:hover { background: rgba(0,188,212,.04); }
+    .log-icon { font-size: .85rem; padding-top: 1px; }
+    .log-body { line-height: 1.4; color: var(--on-muted); }
+    .log-body strong { color: var(--on-surface); font-weight: 600; }
+    .log-body small { font-size: .65rem; color: var(--on-muted); }
+    .log-time { font-size: .62rem; color: var(--on-muted); white-space: nowrap; padding-top: 2px; }
+    .log-badge {
+      display: inline-block;
+      font-size: .6rem;
+      font-weight: 700;
+      border-radius: 50px;
+      padding: 1px 6px;
+      margin-left: 4px;
+      vertical-align: middle;
+    }
+    .badge-on, .badge-schedule-on { background: rgba(0,230,118,.2); color: #00E676; }
+    .badge-off, .badge-schedule-off { background: rgba(84,110,122,.2); color: #90A4AE; }
+    .badge-cutoff { background: rgba(255,82,82,.2); color: #FF5252; }
+    .badge-error  { background: rgba(255,82,82,.2); color: #FF5252; }
+    .log-empty { padding: 20px 16px; color: var(--on-muted); font-size: .8rem; line-height: 1.5; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(0,188,212,.25); border-radius: 4px; }
+  </style>
+</head>
+<body>
+
+  <!-- Top bar -->
+  <header class="topbar">
+    <div class="topbar-accent"></div>
+    <div class="topbar-brand">
+      <div class="name">Smart Home</div>
+      <div class="sub">Hardware Simulator Dashboard</div>
+    </div>
+    <div class="topbar-right">
+      <div class="live-dot"></div>
+      <div class="live-label">Live · Firestore</div>
+    </div>
+  </header>
+
+  <!-- Alert banner (iron cutoff) -->
+  <div id="alert-banner" class="alert-banner">
+    <span id="alert-msg"></span>
+    <span id="alert-close" class="alert-close" title="Dismiss">✕</span>
+  </div>
+
+  <!-- Layout -->
+  <div class="layout">
+
+    <!-- Sidebar — floor plan list -->
+    <aside class="sidebar">
+      <div class="sidebar-header">Floor Plans</div>
+      <div id="sidebar-list"></div>
+    </aside>
+
+    <!-- Main content -->
+    <main class="main">
+      <div class="main-header">
+        <h1 id="header-title">Loading…</h1>
+        <p id="header-sub">Connecting to Firestore</p>
+      </div>
+
+      <!-- Legend -->
+      <div class="legend">
+        <div class="legend-item"><div class="legend-dot dot-on"></div>ON</div>
+        <div class="legend-item"><div class="legend-dot dot-off"></div>OFF</div>
+        <div class="legend-item"><div class="legend-dot dot-err"></div>ERROR</div>
+        <div class="legend-item"><div class="legend-dot dot-disc"></div>DISCONNECTED</div>
+        <div style="margin-left:auto;font-size:.7rem;color:var(--on-muted);">Click a device to toggle</div>
+      </div>
+
+      <div class="content-split">
+        <!-- 8×8 grid -->
+        <div class="grid-panel">
+          <div id="grid"></div>
+        </div>
+
+        <!-- Event log -->
+        <div class="log-panel">
+          <div class="log-panel-header">📋 Event Log</div>
+          <div id="logs-container"></div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+</body>
+</html>

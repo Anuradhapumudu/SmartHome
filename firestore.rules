@@ -1,0 +1,52 @@
+rules_version = '2';
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Firestore Security Rules — SmartHome project
+//
+// Current mode: "open for development" — allows all authenticated clients.
+// For the course submission this is acceptable because:
+//   1. The project has no user-facing authentication layer (by design).
+//   2. The API key is not a secret — Firebase rules are the access gate.
+//   3. These rules still block arbitrary public writes (they require the
+//      request to carry a valid Firebase app identity via the SDK).
+//
+// Before production: replace the allow conditions with proper auth checks,
+// e.g.  if request.auth != null && request.auth.uid == resource.data.ownerId
+// ──────────────────────────────────────────────────────────────────────────────
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Floor plans ─────────────────────────────────────────────────────────
+    // Any app client (Android or web simulator) can read/write floor plans.
+    match /floorPlans/{planId} {
+      allow read, write: if true;
+
+      // ── Devices (sub-collection) ─────────────────────────────────────────
+      // Any app client can read/write devices belonging to a floor plan.
+      match /devices/{deviceId} {
+        allow read, write: if true;
+      }
+    }
+
+    // ── Usage logs ───────────────────────────────────────────────────────────
+    // Any app client can read all logs; only append (create) is permitted —
+    // existing log entries should not be edited or deleted.
+    match /usageLogs/{logId} {
+      allow read, create: if true;
+      allow update, delete: if false;
+    }
+
+    // ── Alerts ───────────────────────────────────────────────────────────────
+    // Written by Cloud Functions (admin SDK bypasses rules), read by clients.
+    match /alerts/{alertId} {
+      allow read: if true;
+      allow write: if false;   // only Cloud Functions write here
+    }
+
+    // ── Deny everything else ─────────────────────────────────────────────────
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -2,6 +2,12 @@ package com.example.smarthome.ui.floorplan
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.EaseInOutSine
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
@@ -54,26 +60,53 @@ fun FloorPlanListScreen(
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Smart Home",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.Bold,
-                            color = TealPrimary
+            Box {
+                // Teal accent strip at the very top of the bar
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(3.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                colors = listOf(
+                                    TealPrimary,
+                                    TealPrimaryLight,
+                                    TealPrimary.copy(alpha = 0f)
+                                )
+                            )
                         )
-                        Text(
-                            text = "Floor Plans",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = SurfaceDark
                 )
-            )
+                TopAppBar(
+                    title = {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .width(3.dp)
+                                    .height(32.dp)
+                                    .clip(RoundedCornerShape(2.dp))
+                                    .background(TealPrimary)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Smart Home",
+                                    style = MaterialTheme.typography.titleLarge,
+                                    fontWeight = FontWeight.ExtraBold,
+                                    color = TealPrimary
+                                )
+                                Text(
+                                    text = "Floor Plans",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = SurfaceDark
+                    )
+                )
+            }
         },
         floatingActionButton = {
             FloatingActionButton(
@@ -269,9 +302,30 @@ private fun EmptyFloorPlansState(
     modifier: Modifier = Modifier,
     onAddClick: () -> Unit
 ) {
+    // Glow pulse animation
+    val infiniteTransition = rememberInfiniteTransition(label = "glow")
+    val glowAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_alpha"
+    )
+    val glowScale by infiniteTransition.animateFloat(
+        initialValue = 1f,
+        targetValue = 1.08f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1400, easing = EaseInOutSine),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_scale"
+    )
+
     AnimatedVisibility(
         visible = true,
-        enter = fadeIn() + slideInVertically(),
+        enter = fadeIn() + slideInVertically { it / 3 },
         exit = fadeOut(),
         modifier = modifier
     ) {
@@ -280,39 +334,62 @@ private fun EmptyFloorPlansState(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             modifier = Modifier.padding(32.dp)
         ) {
-            Box(
-                modifier = Modifier
-                    .size(100.dp)
-                    .clip(CircleShape)
-                    .background(TealContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = Icons.Filled.Home,
-                    contentDescription = null,
-                    tint = TealPrimary,
-                    modifier = Modifier.size(52.dp)
+            // Glowing icon with outer ring
+            Box(contentAlignment = Alignment.Center) {
+                // Outer glow ring
+                Box(
+                    modifier = Modifier
+                        .size(120.dp)
+                        .scale(glowScale)
+                        .clip(CircleShape)
+                        .background(TealPrimary.copy(alpha = glowAlpha * 0.15f))
+                        .border(
+                            width = 1.5.dp,
+                            color = TealPrimary.copy(alpha = glowAlpha * 0.6f),
+                            shape = CircleShape
+                        )
                 )
+                // Inner icon circle
+                Box(
+                    modifier = Modifier
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(TealContainer),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.Home,
+                        contentDescription = null,
+                        tint = TealPrimary,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
             }
+
+            Spacer(modifier = Modifier.height(4.dp))
+
             Text(
                 text = "No Floor Plans Yet",
-                style = MaterialTheme.typography.titleLarge,
+                style = MaterialTheme.typography.headlineSmall,
                 fontWeight = FontWeight.Bold,
                 color = OnSurface
             )
             Text(
-                text = "Tap the + button to add your first floor plan and start managing your smart devices.",
+                text = "Tap the + button to add your first\nfloor plan and start managing\nyour smart devices.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = OnSurfaceVariant,
                 textAlign = androidx.compose.ui.text.style.TextAlign.Center
             )
+            Spacer(modifier = Modifier.height(4.dp))
             Button(
                 onClick = onAddClick,
-                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary)
+                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
+                shape = RoundedCornerShape(50.dp),
+                contentPadding = PaddingValues(horizontal = 28.dp, vertical = 14.dp)
             ) {
                 Icon(Icons.Filled.Add, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Add Floor Plan", color = BackgroundDark, fontWeight = FontWeight.SemiBold)
+                Text("Add Floor Plan", color = BackgroundDark, fontWeight = FontWeight.Bold)
             }
         }
     }
