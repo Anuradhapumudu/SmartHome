@@ -1,0 +1,231 @@
+package com.example.smarthome.data.repository
+
+import android.util.Log
+import com.example.smarthome.data.model.Device
+import com.example.smarthome.data.model.DeviceStatus
+import com.example.smarthome.data.model.FloorPlan
+import com.example.smarthome.data.model.UsageLog
+import com.google.firebase.Timestamp
+import com.google.firebase.firestore.FirebaseFirestore
+import com.google.firebase.firestore.ListenerRegistration
+import com.google.firebase.firestore.Query
+import kotlinx.coroutines.channels.awaitClose
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.callbackFlow
+import kotlinx.coroutines.tasks.await
+
+/**
+ * Single source of truth for all Firestore read/write operations.
+ *
+ * Collection structure:
+ *   floorPlans/{id}
+ *     └─ devices/{id}
+ *   usageLogs/{id}
+ */
+class FirestoreRepository {
+
+    private val db = FirebaseFirestore.getInstance()
+    private val floorPlansRef = db.collection("floorPlans")
+    private val usageLogsRef = db.collection("usageLogs")
+
+    // ──────────────────────────────────────────────────────────
+    // FLOOR PLANS
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Real-time stream of all floor plans.
+     * Automatically updates when Firestore changes.
+     */
+    fun observeFloorPlans(): Flow<List<FloorPlan>> = callbackFlow {
+        val registration: ListenerRegistration = floorPlansRef
+            .orderBy("createdAt", Query.Direction.ASCENDING)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FirestoreRepo", "observeFloorPlans error", error)
+                    return@addSnapshotListener
+                }
+                val plans = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(FloorPlan::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(plans)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun addFloorPlan(floorPlan: FloorPlan): String {
+        val docRef = floorPlansRef.add(
+            floorPlan.copy(createdAt = Timestamp.now())
+        ).await()
+        return docRef.id
+    }
+
+    suspend fun deleteFloorPlan(floorPlanId: String) {
+        floorPlansRef.document(floorPlanId).delete().await()
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // DEVICES
+    // ──────────────────────────────────────────────────────────
+
+    /**
+     * Real-time stream of all devices on a specific floor plan.
+     */
+    fun observeDevices(floorPlanId: String): Flow<List<Device>> = callbackFlow {
+        val devicesRef = floorPlansRef.document(floorPlanId).collection("devices")
+        val registration: ListenerRegistration = devicesRef
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FirestoreRepo", "observeDevices error", error)
+                    return@addSnapshotListener
+                }
+                val devices = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(Device::class.java)?.copy(id = doc.id, floorPlanId = floorPlanId)
+                } ?: emptyList()
+                trySend(devices)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    /**
+     * Real-time stream of a single device document.
+     */
+    fun observeDevice(floorPlanId: String, deviceId: String): Flow<Device?> = callbackFlow {
+        val docRef = floorPlansRef
+            .document(floorPlanId)
+            .collection("devices")
+            .document(deviceId)
+        val registration: ListenerRegistration = docRef
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FirestoreRepo", "observeDevice error", error)
+                    return@addSnapshotListener
+                }
+                val device = snapshot?.toObject(Device::class.java)
+                    ?.copy(id = snapshot.id, floorPlanId = floorPlanId)
+                trySend(device)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    suspend fun addDevice(floorPlanId: String, device: Device): String {
+        val devicesRef = floorPlansRef.document(floorPlanId).collection("devices")
+        val docRef = devicesRef.add(
+            device.copy(floorPlanId = floorPlanId, createdAt = Timestamp.now())
+        ).await()
+        return docRef.id
+    }
+
+    suspend fun updateDevice(floorPlanId: String, device: Device) {
+        val docRef = floorPlansRef
+            .document(floorPlanId)
+            .collection("devices")
+            .document(device.id)
+        docRef.set(device).await()
+    }
+
+    /**
+     * Toggles the top-level status of a device (ON ↔ OFF).
+     * Also writes lastTurnedOnAt for IRON devices when turning ON.
+     */
+    suspend fun toggleDeviceStatus(floorPlanId: String, device: Device) {
+        val newStatus = if (device.status == DeviceStatus.ON.name)
+            DeviceStatus.OFF.name else DeviceStatus.ON.name
+
+        val docRef = floorPlansRef
+            .document(floorPlanId)
+            .collection("devices")
+            .document(device.id)
+
+        val updates = mutableMapOf<String, Any>(
+            "status" to newStatus
+        )
+
+        // For iron devices, record the time they were turned on
+        if (device.type == "IRON" && newStatus == DeviceStatus.ON.name) {
+            updates["lastTurnedOnAt"] = Timestamp.now()
+        }
+
+        docRef.update(updates).await()
+
+        // Log the toggle event
+        logUsage(device, floorPlanId, newStatus)
+    }
+
+    /**
+     * Updates a single child switch inside a MULTI_SWITCH unit.
+     */
+    suspend fun updateMultiSwitch(
+        floorPlanId: String,
+        deviceId: String,
+        updatedSwitches: List<com.example.smarthome.data.model.SwitchState>
+    ) {
+        val docRef = floorPlansRef
+            .document(floorPlanId)
+            .collection("devices")
+            .document(deviceId)
+        docRef.update("switches", updatedSwitches).await()
+    }
+
+    suspend fun deleteDevice(floorPlanId: String, deviceId: String) {
+        floorPlansRef
+            .document(floorPlanId)
+            .collection("devices")
+            .document(deviceId)
+            .delete()
+            .await()
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // USAGE LOGS
+    // ──────────────────────────────────────────────────────────
+
+    fun observeUsageLogs(limitDays: Int = 7): Flow<List<UsageLog>> = callbackFlow {
+        val registration: ListenerRegistration = usageLogsRef
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(200)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FirestoreRepo", "observeUsageLogs error", error)
+                    return@addSnapshotListener
+                }
+                val logs = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(UsageLog::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(logs)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    fun observeDeviceUsageLogs(deviceId: String): Flow<List<UsageLog>> = callbackFlow {
+        val registration: ListenerRegistration = usageLogsRef
+            .whereEqualTo("deviceId", deviceId)
+            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .limit(50)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    Log.e("FirestoreRepo", "observeDeviceUsageLogs error", error)
+                    return@addSnapshotListener
+                }
+                val logs = snapshot?.documents?.mapNotNull { doc ->
+                    doc.toObject(UsageLog::class.java)?.copy(id = doc.id)
+                } ?: emptyList()
+                trySend(logs)
+            }
+        awaitClose { registration.remove() }
+    }
+
+    private suspend fun logUsage(device: Device, floorPlanId: String, event: String) {
+        try {
+            val log = UsageLog(
+                deviceId = device.id,
+                deviceName = device.name,
+                floorPlanId = floorPlanId,
+                event = event,
+                timestamp = Timestamp.now()
+            )
+            usageLogsRef.add(log).await()
+        } catch (e: Exception) {
+            Log.e("FirestoreRepo", "Failed to write usage log", e)
+        }
+    }
+}
