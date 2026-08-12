@@ -134,7 +134,8 @@ fun FloorPlanGridScreen(
                 viewModel.deleteDevice(device.id)
                 selectedDevice = null
             },
-            onDismiss = { selectedDevice = null }
+            onDismiss = { selectedDevice = null },
+            onUpdateDevice = { updatedDevice -> viewModel.updateDeviceFields(updatedDevice) }
         )
     }
 

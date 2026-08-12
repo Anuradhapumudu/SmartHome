@@ -120,6 +120,15 @@ exports.ironSafetyCutoff = onSchedule(
     const batch = db.batch();
     const cutoffPromises = [];
 
+    // Cache floor plan names to avoid repeated reads
+    const planNameCache = {};
+    const getPlanName = async (planId) => {
+      if (planNameCache[planId]) return planNameCache[planId];
+      const snap = await db.collection("floorPlans").doc(planId).get();
+      planNameCache[planId] = snap.exists ? (snap.data().name || "") : "";
+      return planNameCache[planId];
+    };
+
     for (const { floorPlanId, deviceId, device } of ironDevices) {
       if (device.status !== "ON") continue;
 
@@ -145,7 +154,9 @@ exports.ironSafetyCutoff = onSchedule(
 
         // Schedule log + notification (can't await inside batch)
         cutoffPromises.push(
-          logEvent(deviceId, device.name, floorPlanId, "", "CUTOFF"),
+          getPlanName(floorPlanId).then((planName) =>
+            logEvent(deviceId, device.name, floorPlanId, planName, "CUTOFF")
+          ),
           sendCutoffAlert(device.name, Math.round(elapsedMin))
         );
       }
@@ -250,3 +261,59 @@ function isInTimeWindow(currentTime, onTime, offTime) {
     return cur >= on || cur < off;
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// FUNCTION 3 — Device Health Checker
+// Trigger: every hour
+// Marks devices DISCONNECTED if their state hasn't changed in 24+ hours
+// and they are currently showing as ON (simulates hardware going offline).
+// ─────────────────────────────────────────────────────────────────────────────
+
+exports.deviceHealthChecker = onSchedule(
+  {
+    schedule: "every 60 minutes",
+    timeZone: "Asia/Colombo",
+    region: "us-central1",
+  },
+  async (event) => {
+    logger.info("deviceHealthChecker: scanning for stale ON devices");
+
+    const floorPlansSnap = await db.collection("floorPlans").get();
+    const nowMs = Date.now();
+    const staleThresholdMs = 24 * 60 * 60 * 1000; // 24 hours
+    const batch = db.batch();
+    const logPromises = [];
+    let staleCount = 0;
+
+    await Promise.all(
+      floorPlansSnap.docs.map(async (planDoc) => {
+        const devicesSnap = await planDoc.ref.collection("devices")
+          .where("status", "==", "ON")
+          .get();
+
+        devicesSnap.docs.forEach((devDoc) => {
+          const device = devDoc.data();
+          const updatedAt = device.lastTurnedOnAt?.seconds;
+          if (!updatedAt) return;
+
+          const ageMs = nowMs - updatedAt * 1000;
+          // Only mark as DISCONNECTED if the device has been ON for more than 24h
+          // and it is NOT an IRON (those are handled by ironSafetyCutoff)
+          if (ageMs > staleThresholdMs && device.type !== "IRON") {
+            logger.info(`DISCONNECTED: "${device.name}" (${devDoc.id}) - stale for ${(ageMs / 3_600_000).toFixed(1)}h`);
+            batch.update(devDoc.ref, { status: "DISCONNECTED" });
+            logPromises.push(
+              logEvent(devDoc.id, device.name, planDoc.id, planDoc.data().name || "", "DISCONNECTED")
+            );
+            staleCount++;
+          }
+        });
+      })
+    );
+
+    await batch.commit();
+    await Promise.all(logPromises);
+
+    logger.info(`deviceHealthChecker: done. Marked ${staleCount} device(s) as DISCONNECTED.`);
+  }
+);

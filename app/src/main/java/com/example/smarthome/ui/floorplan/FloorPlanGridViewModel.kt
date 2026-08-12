@@ -77,6 +77,13 @@ class FloorPlanGridViewModel(
         }
     }
 
+    /** Updates editable fields of a device (e.g. light schedule times). */
+    fun updateDeviceFields(device: Device) {
+        viewModelScope.launch {
+            repository.updateDevice(floorPlanId, device)
+        }
+    }
+
     /** Builds an initial list of SwitchState for a new multi-switch device */
     fun buildDefaultSwitches(count: Int): List<SwitchState> =
         (0 until count).map { i ->
