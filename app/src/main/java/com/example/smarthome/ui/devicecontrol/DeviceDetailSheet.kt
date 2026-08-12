@@ -319,6 +319,11 @@ private fun IronControls(device: Device, onToggle: () -> Unit) {
                 }
             }
         }
+        Text(
+            text = if (isOn) "Light is ON" else "Light is OFF",
+            style = MaterialTheme.typography.titleMedium,
+            color = if (isOn) StatusOn else OnSurfaceVariant
+        )
         BigToggleButton(isOn = isOn, onToggle = onToggle)
         GridPositionInfo(device = device)
     }
@@ -390,6 +395,11 @@ private fun LightControls(device: Device, onToggle: () -> Unit, onUpdateDevice: 
                 }
             }
         }
+        Text(
+            text = if (isOn) "Light is ON" else "Light is OFF",
+            style = MaterialTheme.typography.titleMedium,
+            color = if (isOn) StatusOn else OnSurfaceVariant
+        )
         BigToggleButton(isOn = isOn, onToggle = onToggle)
         GridPositionInfo(device = device)
     }

@@ -157,17 +157,18 @@
       const json = await res.json();
       if (!json.documents) return [];
       return json.documents.map(d => {
-        const id = d.name.split("/").pop();
+        const docId = d.name.split("/").pop();
         const data = {};
         for (const [k, v] of Object.entries(d.fields || {})) {
           data[k] = fromFirestoreValue(v);
         }
-        return { id, ...data };
+        return { ...data, id: docId };
       });
     }
 
     // PATCH a device document via REST (update specific fields)
     async function patchDeviceViaRest(planId, deviceId, fields) {
+      if (!deviceId) throw new Error("Missing deviceId");
       const { projectId, apiKey } = firebaseConfig;
       const fieldMask = Object.keys(fields).join(",");
       const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/floorPlans/${planId}/devices/${deviceId}?updateMask.fieldPaths=${fieldMask}&key=${apiKey}`;
@@ -551,11 +552,17 @@
     window._closePanel = () => closeDetailPanel();
 
     window._toggleDevice = async (deviceId) => {
-      if (!activePlanId) return;
+      if (!activePlanId || !deviceId) {
+        console.error("Toggle aborted: missing planId or deviceId");
+        return;
+      }
 
       // Use selectedDevice as primary source — works even if global devices[] is empty
       const device = devices.find(d => d.id === deviceId) || selectedDevice;
-      if (!device || device.id !== deviceId) return;
+      if (!device || device.id !== deviceId) {
+        console.error("Toggle aborted: device not found for ID", deviceId);
+        return;
+      }
 
       const newStatus = device.status === "ON" ? "OFF" : "ON";
       const updates = { status: newStatus };
@@ -622,7 +629,7 @@
     };
 
     window._toggleSwitch = async (deviceId, switchIndex) => {
-      if (!activePlanId) return;
+      if (!activePlanId || !deviceId) return;
       const device = devices.find(d => d.id === deviceId);
       if (!device) return;
       const updatedSwitches = (device.switches || []).map(sw => {
