@@ -31,13 +31,14 @@ import com.example.smarthome.ui.theme.*
 @Composable
 fun AddDeviceDialog(
     occupiedPositions: Set<Pair<Int, Int>> = emptySet(),
+    initialPosition: Pair<Int, Int>? = null,
     onConfirm: (Device) -> Unit,
     onDismiss: () -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var selectedType by remember { mutableStateOf(DeviceType.OUTLET) }
-    var gridX by remember { mutableIntStateOf(0) }
-    var gridY by remember { mutableIntStateOf(0) }
+    var gridX by remember { mutableIntStateOf(initialPosition?.first ?: 0) }
+    var gridY by remember { mutableIntStateOf(initialPosition?.second ?: 0) }
 
     // Type-specific fields
     var switchCount by remember { mutableIntStateOf(2) }

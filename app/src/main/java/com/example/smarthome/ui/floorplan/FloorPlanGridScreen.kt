@@ -48,6 +48,7 @@ fun FloorPlanGridScreen(
 
     var showAddDevice by remember { mutableStateOf(false) }
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
+    var pendingAddPosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
     // Derived: Current device being viewed, always fresh from the 'devices' list
     val selectedDevice = remember(selectedDeviceId, devices) {
@@ -123,7 +124,11 @@ fun FloorPlanGridScreen(
             } else {
                 FloorPlanGrid(
                     deviceMap = deviceMap,
-                    onCellClick = { device -> selectedDeviceId = device.id }
+                    onCellClick = { device -> selectedDeviceId = device.id },
+                    onEmptyCellClick = { x, y ->
+                        pendingAddPosition = Pair(x, y)
+                        showAddDevice = true
+                    }
                 )
             }
         }
@@ -148,11 +153,16 @@ fun FloorPlanGridScreen(
     if (showAddDevice) {
         AddDeviceDialog(
             occupiedPositions = occupiedPositions,
+            initialPosition = pendingAddPosition,
             onConfirm = { newDevice ->
                 viewModel.addDevice(newDevice)
                 showAddDevice = false
+                pendingAddPosition = null
             },
-            onDismiss = { showAddDevice = false }
+            onDismiss = {
+                showAddDevice = false
+                pendingAddPosition = null
+            }
         )
     }
 }
@@ -164,7 +174,8 @@ fun FloorPlanGridScreen(
 @Composable
 private fun FloorPlanGrid(
     deviceMap: Map<Pair<Int, Int>, Device>,
-    onCellClick: (Device) -> Unit
+    onCellClick: (Device) -> Unit,
+    onEmptyCellClick: (Int, Int) -> Unit
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
         val cellSize: Dp = (maxWidth - 2.dp) / GRID_COLUMNS
@@ -215,11 +226,13 @@ private fun FloorPlanGrid(
                         modifier = Modifier
                             .offset(x = cellSize * col, y = cellSize * row)
                             .size(cellSize)
-                            .then(
+                            .clickable {
                                 if (device != null) {
-                                    Modifier.clickable { onCellClick(device) }
-                                } else Modifier
-                            ),
+                                    onCellClick(device)
+                                } else {
+                                    onEmptyCellClick(col, row)
+                                }
+                            },
                         contentAlignment = Alignment.Center
                     ) {
                         if (device != null) {
