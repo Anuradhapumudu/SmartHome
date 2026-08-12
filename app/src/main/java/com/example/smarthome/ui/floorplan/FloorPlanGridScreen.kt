@@ -47,7 +47,12 @@ fun FloorPlanGridScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     var showAddDevice by remember { mutableStateOf(false) }
-    var selectedDevice by remember { mutableStateOf<Device?>(null) }
+    var selectedDeviceId by remember { mutableStateOf<String?>(null) }
+
+    // Derived: Current device being viewed, always fresh from the 'devices' list
+    val selectedDevice = remember(selectedDeviceId, devices) {
+        devices.firstOrNull { it.id == selectedDeviceId }
+    }
 
     // Map for fast lookup by grid position
     val deviceMap = remember(devices) {
@@ -118,7 +123,7 @@ fun FloorPlanGridScreen(
             } else {
                 FloorPlanGrid(
                     deviceMap = deviceMap,
-                    onCellClick = { device -> selectedDevice = device }
+                    onCellClick = { device -> selectedDeviceId = device.id }
                 )
             }
         }
@@ -132,9 +137,9 @@ fun FloorPlanGridScreen(
             onSwitchToggle = { switchIndex -> viewModel.toggleSwitch(device, switchIndex) },
             onDelete = {
                 viewModel.deleteDevice(device.id)
-                selectedDevice = null
+                selectedDeviceId = null
             },
-            onDismiss = { selectedDevice = null },
+            onDismiss = { selectedDeviceId = null },
             onUpdateDevice = { updatedDevice -> viewModel.updateDeviceFields(updatedDevice) }
         )
     }
