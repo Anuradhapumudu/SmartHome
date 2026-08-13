@@ -4,17 +4,12 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Smart Home — Hardware Simulator Dashboard</title>
-  <meta name="description"
-    content="Real-time hardware simulator dashboard for the Smart Home system. Mirrors Firestore device state, shows floor plan overlay, and allows full device control with type-specific panels." />
-
-  <!-- Google Font: Inter -->
+  <title>Smart Home — Professional Hardware Simulator</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
-    rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet" />
 
-  <!-- Firebase JS SDK v10 (ESM via CDN) -->
+  <!-- Firebase JS SDK v10 -->
   <script type="module">
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
     import {
@@ -39,7 +34,6 @@
       onAuthStateChanged,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-    // ── Firebase config ─────────────────────────────────────────────────────
     const firebaseConfig = {
       apiKey: "AIzaSyDPHNeQf1wtUJbrhwYErM9B8Fb1_6hAXts",
       authDomain: "smarthome-59f93.firebaseapp.com",
@@ -53,7 +47,6 @@
     const db = getFirestore(app);
     const auth = getAuth(app);
 
-    // ── App state ────────────────────────────────────────────────────────────
     let currentUser = null;
     let floorPlans = [];
     let activePlanId = null;
@@ -62,34 +55,25 @@
     let allLogs = [];
     let floorPlanUnsub = null;
     let deviceUnsub = null;
-    let alertUnsub = null;
-    let ironTimers = {}; // deviceId -> setInterval id
     let selectedDevice = null;
 
-    // ── DOM refs ─────────────────────────────────────────────────────────────
-    let sidebarList, gridContainer, headerTitle, headerSub, alertBanner, alertMsg;
-    let logsContainer, logFilterBtns;
-    let statTotal, statOn, statOff, statCutoffs;
-    let detailPanel;
-    let activeLogFilter = "ALL";
+    let sidebarList, gridContainer, headerTitle, headerSub;
+    let logsContainer, statTotal, statOn, statOff;
+    let detailPanel, authOverlay, loginForm, signupForm, authError;
 
-    let authOverlay, loginForm, signupForm, authError;
-    let topbarUser, userEmailDisplay;
-
-    // ── Auth Handling ────────────────────────────────────────────────────────
     function initAuth() {
       onAuthStateChanged(auth, (user) => {
         if (user) {
           currentUser = user;
           authOverlay.classList.add("hidden");
-          topbarUser.style.display = "flex";
-          userEmailDisplay.textContent = user.email;
+          document.getElementById("topbar-user").style.display = "flex";
+          document.getElementById("user-email").textContent = user.email;
           subscribeToFloorPlans();
           subscribeToLogs();
         } else {
           currentUser = null;
           authOverlay.classList.remove("hidden");
-          topbarUser.style.display = "none";
+          document.getElementById("topbar-user").style.display = "none";
           resetAppState();
         }
       });
@@ -97,19 +81,23 @@
       document.getElementById("login-btn").addEventListener("click", handleLogin);
       document.getElementById("signup-btn").addEventListener("click", handleSignup);
       document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
-
       document.getElementById("show-signup").addEventListener("click", (e) => {
         e.preventDefault();
-        loginForm.style.display = "none";
-        signupForm.style.display = "block";
-        authError.style.display = "none";
+        loginForm.style.display = "none"; signupForm.style.display = "block"; authError.style.display = "none";
       });
       document.getElementById("show-login").addEventListener("click", (e) => {
         e.preventDefault();
-        signupForm.style.display = "none";
-        loginForm.style.display = "block";
-        authError.style.display = "none";
+        signupForm.style.display = "none"; loginForm.style.display = "block"; authError.style.display = "none";
       });
+      document.getElementById("theme-toggle").addEventListener("click", toggleTheme);
+    }
+
+    function toggleTheme() {
+      const body = document.body;
+      const current = body.getAttribute("data-theme");
+      const next = current === "dark" ? "light" : "dark";
+      body.setAttribute("data-theme", next);
+      document.getElementById("theme-icon").textContent = next === "dark" ? "☀️" : "🌙";
     }
 
     async function handleLogin() {
@@ -118,84 +106,45 @@
       try {
         authError.style.display = "none";
         await signInWithEmailAndPassword(auth, email, pass);
-      } catch (err) {
-        authError.textContent = "Login failed: " + err.message;
-        authError.style.display = "block";
-      }
+      } catch (err) { authError.textContent = "Access Denied: " + err.message; authError.style.display = "block"; }
     }
 
     async function handleSignup() {
       const email = document.getElementById("signup-email").value;
       const pass = document.getElementById("signup-password").value;
       const confirm = document.getElementById("signup-confirm").value;
-
-      if (pass !== confirm) {
-        authError.textContent = "Passwords do not match";
-        authError.style.display = "block";
-        return;
-      }
-
+      if (pass !== confirm) { authError.textContent = "Keys do not match"; authError.style.display = "block"; return; }
       try {
         authError.style.display = "none";
         await createUserWithEmailAndPassword(auth, email, pass);
-      } catch (err) {
-        authError.textContent = "Signup failed: " + err.message;
-        authError.style.display = "block";
-      }
+      } catch (err) { authError.textContent = "Registration Failed: " + err.message; authError.style.display = "block"; }
     }
 
     function resetAppState() {
       if (floorPlanUnsub) floorPlanUnsub();
       if (deviceUnsub) deviceUnsub();
-      if (alertUnsub) alertUnsub();
-      floorPlans = [];
-      devices = [];
-      allLogs = [];
-      activePlanId = null;
-      renderSidebar();
-      renderGrid();
-      renderLogs();
-      updateStats();
+      floorPlans = []; devices = []; allLogs = []; activePlanId = null;
+      renderSidebar(); renderGrid(); renderLogs(); updateStats();
     }
 
-    // ── Utility ──────────────────────────────────────────────────────────────
     function fmtTime(ts) {
       if (!ts) return "";
       const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
-      return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
-    }
-    function fmtDateTime(ts) {
-      if (!ts) return "";
-      const d = ts.toDate ? ts.toDate() : new Date(ts.seconds * 1000);
-      return d.toLocaleString("en-GB", { dateStyle: "short", timeStyle: "medium" });
-    }
-    function escHtml(str) {
-      return String(str)
-        .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-    }
-    function secondsElapsed(ts) {
-      if (!ts) return 0;
-      const sec = ts.seconds || Math.floor(ts / 1000);
-      return Math.floor((Date.now() / 1000) - sec);
+      return d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
     }
 
-    // ── Sidebar ──────────────────────────────────────────────────────────────
     function renderSidebar() {
       sidebarList.innerHTML = "";
       if (floorPlans.length === 0) {
-        sidebarList.innerHTML = `<div class="empty-sidebar">No floor plans yet.<br/>Add one from the Android app.</div>`;
+        sidebarList.innerHTML = `<div class="empty-sidebar">No active zones</div>`;
         return;
       }
       floorPlans.forEach((plan) => {
         const el = document.createElement("div");
         el.className = "sidebar-item" + (plan.id === activePlanId ? " active" : "");
-        const devCount = plan.id === activePlanId ? devices.length : "?";
         el.innerHTML = `
-          <span class="sidebar-icon">🏠</span>
-          <div class="sidebar-label-group">
-            <span class="sidebar-label">${escHtml(plan.name)}</span>
-            <span class="sidebar-count">${devCount} device${devCount !== 1 ? "s" : ""}</span>
-          </div>
+          <span class="sidebar-label">${plan.name}</span>
+          <span class="sidebar-count">${plan.id === activePlanId ? devices.length : "?"} units</span>
         `;
         el.addEventListener("click", () => selectPlan(plan.id, plan.name));
         sidebarList.appendChild(el);
@@ -203,2203 +152,298 @@
     }
 
     function selectPlan(planId, planName) {
-      activePlanId = planId;
-      activePlanName = planName;
-      headerTitle.textContent = planName;
-      headerSub.textContent = "Loading devices…";
-      closeDetailPanel();
-      renderSidebar();
-      subscribeToDevices(planId);
-    }
-
-    // ── Device subscription ── REST API primary + SDK fallback + polling ─────
-    let pollInterval = null;
-    let lastToggleTime = 0;
-
-    // Convert a Firestore REST API typed value to a plain JS value
-    function fromFirestoreValue(val) {
-      if (!val) return null;
-      if ("stringValue" in val) return val.stringValue;
-      if ("integerValue" in val) return parseInt(val.integerValue, 10);
-      if ("doubleValue" in val) return val.doubleValue;
-      if ("booleanValue" in val) return val.booleanValue;
-      if ("nullValue" in val) return null;
-      if ("timestampValue" in val) {
-        const ms = new Date(val.timestampValue).getTime();
-        return { seconds: Math.floor(ms / 1000), toDate: () => new Date(val.timestampValue) };
-      }
-      if ("arrayValue" in val) {
-        return (val.arrayValue.values || []).map(fromFirestoreValue);
-      }
-      if ("mapValue" in val) {
-        const obj = {};
-        for (const [k, v] of Object.entries(val.mapValue.fields || {})) {
-          obj[k] = fromFirestoreValue(v);
-        }
-        return obj;
-      }
-      return null;
-    }
-
-    // Fetch all devices via Firestore REST API (bypasses SDK listener issues)
-    async function fetchDevicesViaRest(planId) {
-      const { projectId, apiKey } = firebaseConfig;
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/floorPlans/${planId}/devices?key=${apiKey}`;
-      const res = await fetch(url);
-      if (!res.ok) {
-        const txt = await res.text();
-        throw new Error(`REST ${res.status}: ${txt.slice(0, 120)}`);
-      }
-      const json = await res.json();
-      if (!json.documents) return [];
-      return json.documents.map(d => {
-        const docId = d.name.split("/").pop();
-        const data = {};
-        for (const [k, v] of Object.entries(d.fields || {})) {
-          data[k] = fromFirestoreValue(v);
-        }
-        return { ...data, id: docId };
-      });
-    }
-
-    // PATCH a device document via REST (update specific fields)
-    async function patchDeviceViaRest(planId, deviceId, fields) {
-      if (!deviceId) throw new Error("Missing deviceId");
-      const { projectId, apiKey } = firebaseConfig;
-      const fieldMask = Object.keys(fields).join(",");
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/floorPlans/${planId}/devices/${deviceId}?updateMask.fieldPaths=${fieldMask}&key=${apiKey}`;
-      const body = { fields: {} };
-      for (const [k, v] of Object.entries(fields)) {
-        if (typeof v === "string") body.fields[k] = { stringValue: v };
-        else if (typeof v === "number") body.fields[k] = { integerValue: String(v) };
-        else if (typeof v === "boolean") body.fields[k] = { booleanValue: v };
-      }
-      const res = await fetch(url, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`PATCH ${res.status}`);
-    }
-
-    // POST a new usageLog document via REST
-    async function addLogViaRest(logData) {
-      const { projectId, apiKey } = firebaseConfig;
-      const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/usageLogs?key=${apiKey}`;
-      const body = { fields: {} };
-      for (const [k, v] of Object.entries(logData)) {
-        if (typeof v === "string") body.fields[k] = { stringValue: v };
-        else if (typeof v === "number") body.fields[k] = { integerValue: String(v) };
-        else if (v instanceof Date) body.fields[k] = { timestampValue: v.toISOString() };
-      }
-      // Set timestamp as real Firestore timestamp
-      body.fields["timestamp"] = { timestampValue: new Date().toISOString() };
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) throw new Error(`POST log ${res.status}`);
-    }
-
-
-    function applyDevices(fetched) {
-      devices = fetched;
-      if (headerSub) headerSub.textContent = `${devices.length} device${devices.length !== 1 ? "s" : ""}`;
-      renderGrid();
-      updateStats();
-      renderSidebar();
-      if (selectedDevice) {
-        const updated = devices.find(d => d.id === selectedDevice.id);
-        if (updated && Date.now() - lastToggleTime > 2000) {
-          selectedDevice = updated;
-          renderDetailPanel(updated);
-        }
-      }
-    }
-
-    async function fetchDevicesOnce(planId, forceLoad = false) {
-      if (!forceLoad && Date.now() - lastToggleTime < 2000) return;
-      if (!currentUser) return;
-      try {
-        // Use SDK with query for isolation
-        const snap = await getDocs(collection(db, "floorPlans", planId, "devices"));
-        const fetched = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-        applyDevices(fetched);
-      } catch (sdkErr) {
-        console.error("SDK fetch failed:", sdkErr);
-        if (headerSub) headerSub.textContent = "⚠ SDK err: " + sdkErr.message;
-      }
+      activePlanId = planId; activePlanName = planName;
+      headerTitle.textContent = planName; headerSub.textContent = "Establishing uplink…";
+      closeDetailPanel(); renderSidebar(); subscribeToDevices(planId);
     }
 
     function subscribeToDevices(planId) {
-      if (deviceUnsub) { deviceUnsub(); deviceUnsub = null; }
-      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-
-      // 1. Immediate REST fetch (shows devices right away)
-      fetchDevicesOnce(planId, true);
-
-      // 2. Real-time SDK onSnapshot (push updates when it works)
-      try {
-        deviceUnsub = onSnapshot(
-          collection(db, "floorPlans", planId, "devices"),
-          (snap) => {
-            const fetched = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-            applyDevices(fetched);
-          },
-          (err) => console.warn("onSnapshot error (REST polling still active):", err)
-        );
-      } catch (e) {
-        console.warn("onSnapshot setup failed:", e);
-      }
-
-      // 3. REST polling every 3s — guarantees live updates regardless of SDK state
-      pollInterval = setInterval(() => fetchDevicesOnce(planId), 3000);
+      if (deviceUnsub) deviceUnsub();
+      deviceUnsub = onSnapshot(collection(db, "floorPlans", planId, "devices"), (snap) => {
+        devices = snap.docs.map(d => ({ ...d.data(), id: d.id }));
+        headerSub.textContent = `${devices.length} units online`;
+        renderGrid(); updateStats();
+      });
     }
 
-
-    // ── Stats bar ─────────────────────────────────────────────────────────────
     function updateStats() {
-      const onCount = devices.filter(d => d.status === "ON").length;
-      const offCount = devices.filter(d => d.status === "OFF" || d.status === "DISCONNECTED" || d.status === "ERROR").length;
       statTotal.textContent = devices.length;
-      statOn.textContent = onCount;
-      statOff.textContent = offCount;
-      // Cutoff count from logs
-      const cutoffs = allLogs.filter(l => l.event === "CUTOFF").length;
-      statCutoffs.textContent = cutoffs;
+      statOn.textContent = devices.filter(d => d.status === "ON").length;
+      statOff.textContent = devices.filter(d => d.status !== "ON").length;
     }
 
-    // ── Grid rendering ────────────────────────────────────────────────────────
-    const ICONS = {
-      OUTLET: "🔌",
-      MULTI_SWITCH: "🔀",
-      IRON: "♨️",
-      LIGHT: "💡",
-      CAMERA: "📷",
-    };
+    const ICONS = { OUTLET: "🔌", MULTI_SWITCH: "🎛", IRON: "⏱", LIGHT: "💡", CAMERA: "📹" };
 
     function renderGrid() {
       gridContainer.innerHTML = "";
-      const COLS = 8, ROWS = 8;
       const deviceMap = {};
       devices.forEach((d) => { deviceMap[`${d.gridX},${d.gridY}`] = d; });
 
-      for (let r = 0; r < ROWS; r++) {
-        for (let c = 0; c < COLS; c++) {
+      for (let r = 0; r < 8; r++) {
+        for (let c = 0; c < 8; c++) {
           const device = deviceMap[`${c},${r}`];
           const cell = document.createElement("div");
           cell.className = "grid-cell" + (device ? " has-device" : "");
           if (device) {
-            cell.dataset.deviceId = device.id;
-            cell.title = device.name + " [" + device.type + "]";
-            cell.innerHTML = buildCellHTML(device);
+            const statusCls = (device.status || "OFF").toLowerCase();
+            cell.innerHTML = `
+              <div class="cell-inner status-${statusCls}">
+                <div class="cell-icon">${ICONS[device.type] || "❓"}</div>
+                <div class="cell-name">${device.name.slice(0, 10)}</div>
+                <div class="cell-dot"></div>
+              </div>
+            `;
             cell.addEventListener("click", () => {
-              selectedDevice = device;
-              renderDetailPanel(device);
-              openDetailPanel();
+              selectedDevice = device; renderDetailPanel(device); openDetailPanel();
             });
+          } else {
+            cell.innerHTML = `<span class="cell-placeholder">·</span>`;
           }
           gridContainer.appendChild(cell);
         }
       }
     }
 
-    function buildCellHTML(device) {
-      const icon = ICONS[device.type] || "❓";
-      const statusCls = (device.status || "OFF").toLowerCase();
-      const name = device.name.length > 8 ? device.name.slice(0, 7) + "…" : device.name;
-
-      // Iron: show time remaining warning
-      let extraBadge = "";
-      if (device.type === "IRON" && device.status === "ON" && device.lastTurnedOnAt) {
-        const elapsed = secondsElapsed(device.lastTurnedOnAt);
-        const maxSec = (device.maxOnDurationMinutes || 30) * 60;
-        const remSec = Math.max(0, maxSec - elapsed);
-        const remMin = Math.floor(remSec / 60);
-        const danger = remMin <= 5;
-        extraBadge = `<div class="cell-timer ${danger ? "timer-danger" : "timer-ok"}" id="iron-timer-${device.id}">⏱${remMin}m</div>`;
-      }
-      // Light: show schedule if configured
-      if (device.type === "LIGHT" && device.turnOnTime && device.turnOffTime) {
-        extraBadge = `<div class="cell-schedule">⏰${device.turnOnTime}–${device.turnOffTime}</div>`;
-      }
-
-      return `
-        <div class="cell-inner status-${statusCls}">
-          <div class="cell-icon">${icon}</div>
-          <div class="cell-name">${escHtml(name)}</div>
-          <div class="cell-badge status-badge-${statusCls}">${device.status || "OFF"}</div>
-          ${extraBadge}
-        </div>
-      `;
-    }
-
-    // Iron countdown timers
-    function startIronTimers() {
-      Object.values(ironTimers).forEach(clearInterval);
-      ironTimers = {};
-      devices.filter(d => d.type === "IRON" && d.status === "ON" && d.lastTurnedOnAt).forEach(device => {
-        ironTimers[device.id] = setInterval(() => {
-          const el = document.getElementById(`iron-timer-${device.id}`);
-          if (!el) return;
-          const elapsed = secondsElapsed(device.lastTurnedOnAt);
-          const maxSec = (device.maxOnDurationMinutes || 30) * 60;
-          const remSec = Math.max(0, maxSec - elapsed);
-          const remMin = Math.floor(remSec / 60);
-          const remSecDisplay = remSec % 60;
-          const danger = remMin <= 5;
-          el.textContent = `⏱${remMin}m${remSecDisplay}s`;
-          el.className = `cell-timer ${danger ? "timer-danger" : "timer-ok"}`;
-        }, 1000);
-      });
-    }
-
-    // ── Detail panel ──────────────────────────────────────────────────────────
-    function openDetailPanel() {
-      detailPanel.classList.add("open");
-    }
-    function closeDetailPanel() {
-      detailPanel.classList.remove("open");
-      selectedDevice = null;
-    }
+    function openDetailPanel() { detailPanel.classList.add("open"); }
+    function closeDetailPanel() { detailPanel.classList.remove("open"); selectedDevice = null; }
 
     function renderDetailPanel(device) {
-      const icon = ICONS[device.type] || "❓";
-      const statusCls = (device.status || "OFF").toLowerCase();
       const isOn = device.status === "ON";
-
-      let typeSection = "";
-
-      if (device.type === "IRON") {
-        const elapsed = device.lastTurnedOnAt ? secondsElapsed(device.lastTurnedOnAt) : 0;
-        const maxSec = (device.maxOnDurationMinutes || 30) * 60;
-        const remSec = Math.max(0, maxSec - elapsed);
-        const remMin = Math.floor(remSec / 60);
-        const remSecPart = remSec % 60;
-        const pct = Math.max(0, 100 - (elapsed / maxSec * 100));
-        const danger = remMin <= 5 && isOn;
-        typeSection = `
-          <div class="detail-section">
-            <div class="detail-section-title">♨️ Iron Safety Timer</div>
-            <div class="iron-timer-display ${danger ? "danger" : ""}">
-              <div class="iron-timer-ring">
-                <svg viewBox="0 0 80 80" class="ring-svg">
-                  <circle cx="40" cy="40" r="34" class="ring-track"/>
-                  <circle cx="40" cy="40" r="34" class="ring-fill ${danger ? "ring-danger" : ""}"
-                    stroke-dasharray="${2 * Math.PI * 34}" 
-                    stroke-dashoffset="${2 * Math.PI * 34 * (1 - pct / 100)}"/>
-                </svg>
-                <div class="ring-label" id="panel-iron-timer">
-                  <span class="ring-min">${remMin}m</span>
-                  <span class="ring-sec">${String(remSecPart).padStart(2, "0")}s</span>
-                </div>
-              </div>
-              <div class="iron-timer-info">
-                <div class="timer-row"><span>Max Duration</span><strong>${device.maxOnDurationMinutes || 30} min</strong></div>
-                <div class="timer-row"><span>Time ON</span><strong>${Math.floor(elapsed / 60)}m ${elapsed % 60}s</strong></div>
-                <div class="timer-row"><span>Status</span><strong class="${danger ? "text-danger" : "text-ok"}">${danger ? "⚠ DANGER" : "✓ SAFE"}</strong></div>
-              </div>
-            </div>
-          </div>`;
-      } else if (device.type === "LIGHT") {
-        const hasSchedule = device.turnOnTime && device.turnOffTime;
-        typeSection = `
-          <div class="detail-section">
-            <div class="detail-section-title">💡 Auto Schedule</div>
-            ${hasSchedule ? `
-              <div class="schedule-display">
-                <div class="schedule-card on-card">
-                  <div class="sched-label">Turns ON</div>
-                  <div class="sched-time">${escHtml(device.turnOnTime)}</div>
-                </div>
-                <div class="schedule-arrow">→</div>
-                <div class="schedule-card off-card">
-                  <div class="sched-label">Turns OFF</div>
-                  <div class="sched-time">${escHtml(device.turnOffTime)}</div>
-                </div>
-              </div>
-              <div class="schedule-note">⏰ Cloud function auto-toggles this device every minute</div>
-            ` : `<div class="schedule-none">No schedule configured</div>`}
-          </div>`;
-      } else if (device.type === "CAMERA") {
-        const hasSnapshot = device.cameraSnapshotUrl && device.cameraSnapshotUrl.trim() !== "";
-        const hasStream = device.cameraStreamUrl && device.cameraStreamUrl.trim() !== "";
-        typeSection = `
-          <div class="detail-section">
-            <div class="detail-section-title">📷 Camera Feed</div>
-            ${hasSnapshot ? `
-              <div class="camera-snapshot-wrap">
-                <img src="${escHtml(device.cameraSnapshotUrl)}" alt="Camera snapshot" class="camera-snapshot" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'"/>
-                <div class="camera-placeholder" style="display:none">📷 Snapshot unavailable</div>
-              </div>
-            ` : `<div class="camera-placeholder">📷 No snapshot URL configured</div>`}
-            ${hasStream ? `
-              <div class="stream-url-card">
-                <span class="stream-icon">📡</span>
-                <div>
-                  <div class="stream-label">Stream URL</div>
-                  <div class="stream-value">${escHtml(device.cameraStreamUrl)}</div>
-                </div>
-              </div>
-            ` : ""}
-          </div>`;
-      } else if (device.type === "MULTI_SWITCH") {
-        const switches = device.switches || [];
-        const switchRows = switches.map(sw => `
-          <div class="switch-row">
-            <div class="switch-dot ${sw.status === "ON" ? "dot-on" : "dot-off"}"></div>
-            <span class="switch-label">${escHtml(sw.label || "Switch " + (sw.switchIndex + 1))}</span>
-            <span class="switch-status-badge badge-${sw.status === "ON" ? "on" : "off"}">${sw.status || "OFF"}</span>
-            <button class="switch-toggle-btn" onclick="window._toggleSwitch('${device.id}', ${sw.switchIndex})">
-              ${sw.status === "ON" ? "Turn OFF" : "Turn ON"}
-            </button>
-          </div>
-        `).join("");
-        typeSection = `
-          <div class="detail-section">
-            <div class="detail-section-title">🔀 Individual Switches (${switches.length})</div>
-            <div class="switches-list">
-              ${switchRows || "<div class='switch-empty'>No switch states found</div>"}
-            </div>
-          </div>`;
-      } else if (device.type === "OUTLET") {
-        typeSection = `
-          <div class="detail-section">
-            <div class="detail-section-title">🔌 Power Outlet</div>
-            <div class="outlet-info">
-              <div class="outlet-status-row">
-                <span>Continuous power supply</span>
-                <span class="badge-${isOn ? "on" : "off"}">${isOn ? "POWERED" : "UNPOWERED"}</span>
-              </div>
-            </div>
-          </div>`;
-      }
-
       detailPanel.innerHTML = `
         <div class="dp-header">
-          <div class="dp-icon-wrap status-${statusCls}">
-            <span class="dp-icon">${icon}</span>
-          </div>
-          <div class="dp-title-group">
-            <div class="dp-name">${escHtml(device.name)}</div>
-            <div class="dp-meta">
-              <span class="dp-type-badge">${escHtml(device.type.replace("_", " "))}</span>
-              <span class="dp-status-badge status-badge-${statusCls}">${device.status}</span>
-            </div>
-            <div class="dp-grid-pos">Grid: (${device.gridX}, ${device.gridY})</div>
-          </div>
+          <div class="dp-name">${device.name}</div>
+          <div class="dp-meta">${device.type} • ${device.status}</div>
           <button class="dp-close" onclick="window._closePanel()">✕</button>
         </div>
-
-        ${typeSection}
-
-        <div class="dp-controls">
-          ${device.type !== "MULTI_SWITCH" && device.type !== "CAMERA" ? `
-            <button id="dp-toggle-btn" class="dp-toggle-btn ${isOn ? "btn-off" : "btn-on"}" 
-              onclick="window._toggleDevice('${device.id}')">
-              ${isOn ? "⏹ Turn OFF" : "▶ Turn ON"}
-            </button>
-          ` : ""}
-        </div>
-
-        <div class="dp-log-section">
-          <div class="dp-log-title">Recent Activity</div>
-          <div class="dp-log-list" id="dp-logs">
-            ${allLogs.filter(l => l.deviceId === device.id).slice(0, 8).map(l => `
-              <div class="dp-log-row">
-                <span class="dp-log-icon">${eventIcon(l.event)}</span>
-                <span class="dp-log-event badge-${l.event.toLowerCase().replace("_", "-")}">${l.event}</span>
-                <span class="dp-log-time">${fmtDateTime(l.timestamp)}</span>
-              </div>
-            `).join("") || "<div class='dp-log-empty'>No events yet</div>"}
-          </div>
+        <div class="dp-body">
+          <button class="primary-btn ${isOn ? "btn-off" : "btn-on"}" onclick="window._toggleDevice('${device.id}')">
+            Switch ${isOn ? "Off" : "On"}
+          </button>
+          <div class="detail-section-title" style="margin-top:24px">Identification</div>
+          <div class="code-block">${device.id}</div>
         </div>
       `;
-
-      // Start iron countdown in panel
-      if (device.type === "IRON" && device.status === "ON" && device.lastTurnedOnAt) {
-        startPanelIronTimer(device);
-      }
     }
 
-    let panelIronInterval = null;
-    function startPanelIronTimer(device) {
-      if (panelIronInterval) clearInterval(panelIronInterval);
-      panelIronInterval = setInterval(() => {
-        const el = document.getElementById("panel-iron-timer");
-        if (!el) { clearInterval(panelIronInterval); return; }
-        const elapsed = secondsElapsed(device.lastTurnedOnAt);
-        const maxSec = (device.maxOnDurationMinutes || 30) * 60;
-        const remSec = Math.max(0, maxSec - elapsed);
-        const remMin = Math.floor(remSec / 60);
-        const remSecPart = remSec % 60;
-        el.innerHTML = `<span class="ring-min">${remMin}m</span><span class="ring-sec">${String(remSecPart).padStart(2, "0")}s</span>`;
-      }, 1000);
-    }
-
-    // ── Global toggle functions (called from inline onclick) ──────────────────
     window._closePanel = () => closeDetailPanel();
-
     window._toggleDevice = async (deviceId) => {
-      if (!activePlanId || !deviceId || !currentUser) {
-        console.error("Toggle aborted: missing planId, deviceId or auth");
-        return;
-      }
-
-      // Use selectedDevice as primary source — works even if global devices[] is empty
-      const device = devices.find(d => d.id === deviceId) || selectedDevice;
-      if (!device || device.id !== deviceId) {
-        console.error("Toggle aborted: device not found for ID", deviceId);
-        return;
-      }
-
-      const newStatus = device.status === "ON" ? "OFF" : "ON";
-      const updates = { status: newStatus };
-      if (device.type === "IRON" && newStatus === "ON") {
-        updates.lastTurnedOnAt = serverTimestamp();
-      }
-
-      // Optimistic UI update — immediately reflect the new state
-      const optimisticDevice = { ...device, status: newStatus };
-      selectedDevice = optimisticDevice;
-      renderDetailPanel(optimisticDevice);
-
-      // Mark toggle time so polling doesn't clobber the optimistic state for 2s
-      lastToggleTime = Date.now();
-
-      // Also update in the global devices array if it's populated
-      const idx = devices.findIndex(d => d.id === deviceId);
-      if (idx !== -1) {
-        devices[idx] = optimisticDevice;
-        renderGrid();
-        updateStats();
-      }
-
-      try {
-        // Use SDK now that we have Auth
-        await updateDoc(doc(db, "floorPlans", activePlanId, "devices", deviceId), updates);
-        await addDoc(collection(db, "usageLogs"), {
-          userId: currentUser.uid,
-          deviceId,
-          deviceName: device.name || "",
-          floorPlanId: activePlanId,
-          floorPlanName: activePlanName,
-          event: newStatus,
-          timestamp: serverTimestamp(),
-        });
-      } catch (err) {
-        console.error("Toggle failed (both REST and SDK):", err);
-        showAlert("⚠ Toggle failed: " + err.message, "error");
-        // Revert optimistic update on error
-        selectedDevice = device;
-        renderDetailPanel(device);
-        if (idx !== -1) {
-          devices[idx] = device;
-          renderGrid();
-          updateStats();
-        }
-      }
-    };
-
-    window._toggleSwitch = async (deviceId, switchIndex) => {
-      if (!activePlanId || !deviceId) return;
       const device = devices.find(d => d.id === deviceId);
       if (!device) return;
-      const updatedSwitches = (device.switches || []).map(sw => {
-        if (sw.switchIndex === switchIndex) {
-          return { ...sw, status: sw.status === "ON" ? "OFF" : "ON" };
-        }
-        return sw;
+      const newStatus = device.status === "ON" ? "OFF" : "ON";
+      await updateDoc(doc(db, "floorPlans", activePlanId, "devices", deviceId), { status: newStatus });
+      await addDoc(collection(db, "usageLogs"), {
+        userId: currentUser.uid, deviceId, deviceName: device.name,
+        floorPlanId: activePlanId, floorPlanName: activePlanName,
+        event: newStatus, timestamp: serverTimestamp(),
       });
-      try {
-        await updateDoc(doc(db, "floorPlans", activePlanId, "devices", deviceId), { switches: updatedSwitches });
-      } catch (err) {
-        console.error("Switch toggle failed:", err);
-      }
     };
 
-    // ── Logs panel ────────────────────────────────────────────────────────────
     function subscribeToLogs() {
-      if (!currentUser) return;
-      const q = query(
-        collection(db, "usageLogs"),
-        where("userId", "==", currentUser.uid),
-        limit(100)
-      );
-      alertUnsub = onSnapshot(q, (snap) => {
+      const q = query(collection(db, "usageLogs"), where("userId", "==", currentUser.uid), limit(50));
+      onSnapshot(q, (snap) => {
         allLogs = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
-        // Sort locally to avoid composite index requirement
-        allLogs.sort((a, b) => {
-          const ta = a.timestamp?.seconds ?? 0;
-          const tb = b.timestamp?.seconds ?? 0;
-          return tb - ta; // Descending
-        });
+        allLogs.sort((a, b) => (b.timestamp?.seconds || 0) - (a.timestamp?.seconds || 0));
         renderLogs();
-        updateStats();
-        // Show alert banner for latest CUTOFF
-        const latest = allLogs[0];
-        if (latest && latest.event === "CUTOFF") {
-          showAlert(`🔥 Iron Safety Cutoff: "${latest.deviceName || "device"}" auto-switched OFF at ${fmtDateTime(latest.timestamp)}`, "cutoff");
-        }
-        // Update panel logs if a device is selected
-        if (selectedDevice) {
-          const dpLogs = document.getElementById("dp-logs");
-          if (dpLogs) {
-            const deviceLogs = allLogs.filter(l => l.deviceId === selectedDevice.id).slice(0, 8);
-            dpLogs.innerHTML = deviceLogs.map(l => `
-              <div class="dp-log-row">
-                <span class="dp-log-icon">${eventIcon(l.event)}</span>
-                <span class="dp-log-event badge-${l.event.toLowerCase().replace("_", "-")}">${l.event}</span>
-                <span class="dp-log-time">${fmtDateTime(l.timestamp)}</span>
-              </div>
-            `).join("") || "<div class='dp-log-empty'>No events yet</div>";
-          }
-        }
       });
     }
 
     function renderLogs() {
       logsContainer.innerHTML = "";
-      let filtered = allLogs;
-      if (activeLogFilter !== "ALL") {
-        filtered = allLogs.filter(l => l.event === activeLogFilter || l.event.startsWith(activeLogFilter));
-      }
-      if (filtered.length === 0) {
-        logsContainer.innerHTML = `<div class="log-empty">No events yet — toggle a device to start.</div>`;
-        return;
-      }
-      filtered.forEach((log) => {
+      if (allLogs.length === 0) { logsContainer.innerHTML = `<div class="log-empty">No telemetry recorded</div>`; return; }
+      allLogs.forEach((log) => {
         const el = document.createElement("div");
-        el.className = "log-entry event-" + log.event.toLowerCase().replace(/_/g, "-");
-        el.innerHTML = `
-          <span class="log-icon">${eventIcon(log.event)}</span>
-          <span class="log-body">
-            <strong>${escHtml(log.deviceName || "unknown")}</strong>
-            <span class="log-badge badge-${log.event.toLowerCase().replace(/_/g, "-")}">${escHtml(log.event)}</span>
-            <br/>
-            <small>${escHtml(log.floorPlanName || "")}</small>
-          </span>
-          <span class="log-time">${fmtDateTime(log.timestamp)}</span>
-        `;
+        el.className = "log-entry";
+        el.innerHTML = `<div><strong>${log.deviceName}</strong><span>${log.event}</span></div><small>${fmtTime(log.timestamp)}</small>`;
         logsContainer.appendChild(el);
       });
     }
 
-    function eventIcon(ev) {
-      if (ev.includes("CUTOFF")) return "🔥";
-      if (ev.includes("SCHEDULE_ON")) return "⏰";
-      if (ev.includes("SCHEDULE_OFF")) return "⏰";
-      if (ev.includes("ON")) return "🟢";
-      return "⚫";
-    }
-
-    // ── Alert banner ──────────────────────────────────────────────────────────
-    function showAlert(msg, type) {
-      alertBanner.className = "alert-banner visible alert-" + type;
-      alertMsg.textContent = msg;
-      if (type !== "cutoff") {
-        setTimeout(() => { alertBanner.className = "alert-banner"; }, 5000);
-      }
-    }
-
     function subscribeToFloorPlans() {
-      if (floorPlanUnsub) floorPlanUnsub();
-      floorPlanUnsub = onSnapshot(
-        query(collection(db, "floorPlans"), where("userId", "==", currentUser.uid)),
-        (snap) => {
-          floorPlans = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
-          // Sort client-side so docs without createdAt still show up
-          floorPlans.sort((a, b) => {
-            const ta = a.createdAt?.seconds ?? 0;
-            const tb = b.createdAt?.seconds ?? 0;
-            return ta - tb;
-          });
-          renderSidebar();
-          if (floorPlans.length > 0 && !activePlanId) {
-            // Auto-select first plan
-            selectPlan(floorPlans[0].id, floorPlans[0].name);
-          } else if (floorPlans.length > 0 && activePlanId && !deviceUnsub) {
-            // Re-attach device listener if it was lost (e.g. page reload)
-            subscribeToDevices(activePlanId);
-          } else if (floorPlans.length === 0) {
-            headerTitle.textContent = "No floor plans";
-            headerSub.textContent = "Add a floor plan from the Android app";
-            gridContainer.innerHTML = `<div class="grid-empty">Add a floor plan from the Android app to begin.</div>`;
-          }
-        },
-        (err) => {
-          console.error("floorPlans listener error:", err);
-          headerSub.textContent = "⚠ Connection error — check console";
-        }
-      );
+      floorPlanUnsub = onSnapshot(query(collection(db, "floorPlans"), where("userId", "==", currentUser.uid)), (snap) => {
+        floorPlans = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        floorPlans.sort((a, b) => (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0));
+        renderSidebar();
+        if (floorPlans.length > 0 && !activePlanId) selectPlan(floorPlans[0].id, floorPlans[0].name);
+      });
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
     document.addEventListener("DOMContentLoaded", () => {
-      sidebarList = document.getElementById("sidebar-list");
-      gridContainer = document.getElementById("grid");
-      headerTitle = document.getElementById("header-title");
-      headerSub = document.getElementById("header-sub");
-      alertBanner = document.getElementById("alert-banner");
-      alertMsg = document.getElementById("alert-msg");
-      logsContainer = document.getElementById("logs-container");
-      statTotal = document.getElementById("stat-total");
-      statOn = document.getElementById("stat-on");
-      statOff = document.getElementById("stat-off");
-      statCutoffs = document.getElementById("stat-cutoffs");
-      detailPanel = document.getElementById("detail-panel");
-
-      authOverlay = document.getElementById("auth-overlay");
-      loginForm = document.getElementById("login-form");
-      signupForm = document.getElementById("signup-form");
+      sidebarList = document.getElementById("sidebar-list"); gridContainer = document.getElementById("grid");
+      headerTitle = document.getElementById("header-title"); headerSub = document.getElementById("header-sub");
+      logsContainer = document.getElementById("logs-container"); statTotal = document.getElementById("stat-total");
+      statOn = document.getElementById("stat-on"); statOff = document.getElementById("stat-off");
+      detailPanel = document.getElementById("detail-panel"); authOverlay = document.getElementById("auth-overlay");
+      loginForm = document.getElementById("login-form"); signupForm = document.getElementById("signup-form");
       authError = document.getElementById("auth-error");
-      topbarUser = document.getElementById("topbar-user");
-      userEmailDisplay = document.getElementById("user-email");
-
-      document.getElementById("alert-close").addEventListener("click", () => {
-        alertBanner.className = "alert-banner";
-      });
-
-      // Log filter buttons
-      document.querySelectorAll(".log-filter-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          activeLogFilter = btn.dataset.filter;
-          document.querySelectorAll(".log-filter-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          renderLogs();
-        });
-      });
-
       initAuth();
-
-      // Iron timer refresh every second
-      setInterval(() => {
-        startIronTimers();
-      }, 1000);
     });
   </script>
 
   <style>
-    *,
-    *::before,
-    *::after {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
     :root {
-      --bg: #090D11;
-      --surface: #111820;
-      --surface2: #182230;
-      --card: #141E28;
-      --teal: #00BCD4;
-      --teal-light: #4DD0E1;
-      --teal-dim: #003035;
-      --teal-glow: rgba(0, 188, 212, 0.15);
-      --amber: #FFC107;
-      --amber-dim: rgba(255, 193, 7, 0.15);
-      --on-surface: #E0F7FA;
-      --on-muted: #7BB8C4;
-      --green: #00E676;
-      --green-dim: rgba(0, 230, 118, 0.15);
-      --red: #FF5252;
-      --red-dim: rgba(255, 82, 82, 0.15);
-      --grey: #546E7A;
-      --radius: 14px;
-      --font: 'Inter', system-ui, sans-serif;
-      --sidebar-w: 240px;
-      --log-w: 300px;
-      --dp-w: 340px;
-    }
-
-    body {
-      font-family: var(--font);
-      background: var(--bg);
-      color: var(--on-surface);
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-    }
-
-    /* ── Top bar ─────────────────────────────────────────────────────────────── */
-    .topbar {
-      background: var(--surface);
-      border-bottom: 1px solid rgba(0, 188, 212, 0.15);
-      padding: 0 24px;
-      height: 58px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      flex-shrink: 0;
-      position: relative;
-      z-index: 10;
-    }
-
-    .topbar::after {
-      content: "";
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      height: 1px;
-      background: linear-gradient(90deg, var(--teal), var(--teal-light), transparent);
-    }
-
-    .topbar-accent {
-      width: 3px;
-      height: 34px;
-      background: var(--teal);
-      border-radius: 2px;
-      flex-shrink: 0;
-    }
-
-    .topbar-brand {
-      line-height: 1.2;
-    }
-
-    .topbar-brand .name {
-      font-size: 1rem;
-      font-weight: 800;
-      color: var(--teal);
-      letter-spacing: -.01em;
-    }
-
-    .topbar-brand .sub {
-      font-size: .68rem;
-      color: var(--on-muted);
-    }
-
-    .topbar-right {
-      margin-left: auto;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-    }
-
-    .live-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--green);
-      box-shadow: 0 0 8px var(--green);
-      animation: pulse 1.4s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-
-      0%,
-      100% {
-        opacity: 1;
-        transform: scale(1)
-      }
-
-      50% {
-        opacity: .5;
-        transform: scale(1.4)
-      }
-    }
-
-    .live-label {
-      font-size: .73rem;
-      color: var(--on-muted);
-    }
-
-    .topbar-badge {
-      font-size: .68rem;
-      color: var(--on-muted);
-      background: var(--surface2);
-      border: 1px solid rgba(0, 188, 212, 0.15);
-      border-radius: 20px;
-      padding: 3px 10px;
-    }
-
-    /* ── Stats bar ───────────────────────────────────────────────────────────── */
-    .statsbar {
-      background: var(--surface);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      padding: 8px 24px;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
-    }
-
-    .stat-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--surface2);
-      border: 1px solid rgba(255, 255, 255, 0.06);
-      border-radius: 20px;
-      padding: 5px 14px;
-    }
-
-    .stat-icon {
-      font-size: .85rem;
-    }
-
-    .stat-label {
-      font-size: .68rem;
-      color: var(--on-muted);
-    }
-
-    .stat-value {
-      font-size: .85rem;
-      font-weight: 700;
-    }
-
-    .stat-total .stat-value {
-      color: var(--teal);
-    }
-
-    .stat-on .stat-value {
-      color: var(--green);
-    }
-
-    .stat-off .stat-value {
-      color: var(--grey);
-    }
-
-    .stat-cutoffs .stat-value {
-      color: var(--red);
-    }
-
-    .statsbar-right {
-      margin-left: auto;
-      font-size: .68rem;
-      color: var(--on-muted);
-    }
-
-    /* ── Alert banner ────────────────────────────────────────────────────────── */
-    .alert-banner {
-      display: none;
-      align-items: center;
-      gap: 12px;
-      padding: 10px 20px;
-      font-size: .82rem;
-      font-weight: 600;
-      flex-shrink: 0;
-    }
-
-    .alert-banner.visible {
-      display: flex;
-    }
-
-    .alert-cutoff {
-      background: var(--red-dim);
-      border-bottom: 1px solid rgba(255, 82, 82, 0.4);
-      color: var(--red);
-    }
-
-    .alert-error {
-      background: rgba(255, 140, 0, .15);
-      border-bottom: 1px solid rgba(255, 140, 0, .4);
-      color: #FFA726;
-    }
-
-    .alert-close {
-      margin-left: auto;
-      cursor: pointer;
-      font-size: 1.1rem;
-      opacity: .7;
-      transition: opacity .15s;
-    }
-
-    .alert-close:hover {
-      opacity: 1;
-    }
-
-    /* ── Layout ──────────────────────────────────────────────────────────────── */
-    .layout {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-    }
-
-    /* ── Sidebar ─────────────────────────────────────────────────────────────── */
-    .sidebar {
-      width: var(--sidebar-w);
-      background: var(--surface);
-      border-right: 1px solid rgba(0, 188, 212, 0.1);
-      display: flex;
-      flex-direction: column;
-      flex-shrink: 0;
-      overflow-y: auto;
-    }
-
-    .sidebar-header {
-      padding: 16px 18px 10px;
-      font-size: .6rem;
-      font-weight: 700;
-      letter-spacing: .12em;
-      text-transform: uppercase;
-      color: var(--on-muted);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .sidebar-item {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      padding: 11px 18px;
-      cursor: pointer;
-      border-left: 3px solid transparent;
-      transition: background .15s, color .15s;
-    }
-
-    .sidebar-item:hover {
-      background: rgba(0, 188, 212, .06);
-    }
-
-    .sidebar-item.active {
-      background: rgba(0, 188, 212, .1);
-      border-left-color: var(--teal);
-    }
-
-    .sidebar-icon {
-      font-size: 1.1rem;
-      flex-shrink: 0;
-    }
-
-    .sidebar-label-group {
-      display: flex;
-      flex-direction: column;
-    }
-
-    .sidebar-label {
-      font-size: .85rem;
-      font-weight: 500;
-      color: var(--on-surface);
-    }
-
-    .sidebar-item.active .sidebar-label {
-      color: var(--teal);
-      font-weight: 600;
-    }
-
-    .sidebar-count {
-      font-size: .65rem;
-      color: var(--on-muted);
-      margin-top: 1px;
-    }
-
-    .empty-sidebar {
-      padding: 20px 18px;
-      font-size: .8rem;
-      color: var(--on-muted);
-      line-height: 1.5;
-    }
-
-    /* ── Main ────────────────────────────────────────────────────────────────── */
-    .main {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      min-width: 0;
-    }
-
-    .main-header {
-      padding: 12px 24px 10px;
-      background: var(--surface);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      flex-shrink: 0;
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .main-header-text {
-      flex: 1;
-    }
-
-    .main-header h1 {
-      font-size: 1.05rem;
-      font-weight: 700;
-      color: var(--teal);
-    }
-
-    .main-header p {
-      font-size: .73rem;
-      color: var(--on-muted);
-      margin-top: 2px;
-    }
-
-    /* Legend */
-    .legend {
-      display: flex;
-      gap: 16px;
-      padding: 7px 24px;
-      background: var(--bg);
-      border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-      flex-shrink: 0;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 5px;
-      font-size: .68rem;
-      color: var(--on-muted);
-    }
-
-    .legend-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-    }
-
-    .dot-on {
-      background: var(--green);
-    }
-
-    .dot-off {
-      background: var(--grey);
-    }
-
-    .dot-err {
-      background: var(--red);
-    }
-
-    .dot-disc {
-      background: #BDBDBD;
-    }
-
-    .legend-hint {
-      margin-left: auto;
-      font-size: .65rem;
-      color: var(--on-muted);
-    }
-
-    /* Grid + logs split */
-    .content-split {
-      flex: 1;
-      display: flex;
-      overflow: hidden;
-    }
-
-    /* ── Grid panel ──────────────────────────────────────────────────────────── */
-    .grid-panel {
-      flex: 1;
-      padding: 16px;
-      overflow-y: auto;
-      position: relative;
-    }
-
-    .grid-empty {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      height: 100%;
-      color: var(--on-muted);
-      font-size: .9rem;
-      text-align: center;
-    }
-
-    /* Floor plan + grid container */
-    .floor-wrap {
-      position: relative;
-      width: 100%;
-      max-width: 560px;
-      aspect-ratio: 1;
-    }
-
-    .floor-bg-img {
-      position: absolute;
-      inset: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      border-radius: 16px;
-      opacity: 0.22;
-      pointer-events: none;
-    }
-
-    #grid {
-      position: relative;
-      display: grid;
-      grid-template-columns: repeat(8, 1fr);
-      gap: 3px;
-      width: 100%;
-      height: 100%;
-      border-radius: 16px;
-      border: 1px solid rgba(0, 188, 212, 0.18);
-      overflow: hidden;
-    }
-
-    .grid-cell {
-      aspect-ratio: 1;
-      background: transparent;
-      border: 1px solid rgba(128, 222, 234, 0.05);
-      border-radius: 7px;
-      transition: background .15s;
-    }
-
-    .grid-cell.has-device {
-      cursor: pointer;
-      border-color: rgba(0, 188, 212, 0.18);
-    }
-
-    .grid-cell.has-device:hover {
-      background: rgba(0, 188, 212, 0.1);
-      transform: scale(1.04);
-      transition: all .12s;
-    }
-
-    .cell-inner {
-      width: 100%;
-      height: 100%;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 1px;
-      padding: 3px;
-      border-radius: 7px;
-      transition: background .2s;
-    }
-
-    .cell-icon {
-      font-size: 1rem;
-      line-height: 1;
-    }
-
-    .cell-name {
-      font-size: .48rem;
-      color: var(--on-muted);
-      text-align: center;
-      overflow: hidden;
-      white-space: nowrap;
-      max-width: 100%;
-    }
-
-    .cell-badge {
-      font-size: .4rem;
-      font-weight: 700;
-      border-radius: 50px;
-      padding: 1px 4px;
-    }
-
-    .cell-timer {
-      font-size: .4rem;
-      font-weight: 700;
-      border-radius: 4px;
-      padding: 1px 3px;
-    }
-
-    .cell-schedule {
-      font-size: .38rem;
-      border-radius: 4px;
-      padding: 1px 3px;
-      color: var(--teal);
-      background: var(--teal-dim);
-    }
-
-    .timer-ok {
-      background: var(--amber-dim);
-      color: var(--amber);
-    }
-
-    .timer-danger {
-      background: var(--red-dim);
-      color: var(--red);
-      animation: blink .7s step-end infinite;
-    }
-
-    @keyframes blink {
-
-      0%,
-      100% {
-        opacity: 1
-      }
-
-      50% {
-        opacity: .3
-      }
-    }
-
-    .status-on {
-      background: var(--green-dim);
-    }
-
-    .status-off {
-      background: transparent;
-    }
-
-    .status-error {
-      background: var(--red-dim);
-    }
-
-    .status-disconnected {
-      background: rgba(84, 110, 122, .1);
-    }
-
-    .status-badge-on {
-      background: rgba(0, 230, 118, .18);
-      color: var(--green);
-    }
-
-    .status-badge-off {
-      background: rgba(84, 110, 122, .18);
-      color: #90A4AE;
-    }
-
-    .status-badge-error {
-      background: var(--red-dim);
-      color: var(--red);
-    }
-
-    .status-badge-disconnected {
-      background: rgba(189, 189, 189, .1);
-      color: #BDBDBD;
-    }
-
-    /* ── Detail panel ────────────────────────────────────────────────────────── */
-    .detail-panel {
-      width: 0;
-      background: var(--surface);
-      border-left: 1px solid rgba(0, 188, 212, 0.1);
-      overflow: hidden;
-      transition: width .25s cubic-bezier(.4, 0, .2, 1);
-      flex-shrink: 0;
-      display: flex;
-      flex-direction: column;
-      overflow-y: auto;
-    }
-
-    .detail-panel.open {
-      width: var(--dp-w);
-    }
-
-    .dp-header {
-      padding: 18px 18px 14px;
-      border-bottom: 1px solid rgba(255, 255, 255, .06);
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      flex-shrink: 0;
-      position: sticky;
-      top: 0;
-      background: var(--surface);
-      z-index: 1;
-    }
-
-    .dp-icon-wrap {
-      width: 48px;
-      height: 48px;
-      border-radius: 12px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.4rem;
-      flex-shrink: 0;
-    }
-
-    .dp-icon-wrap.status-on {
-      background: var(--green-dim);
-    }
-
-    .dp-icon-wrap.status-off {
-      background: var(--surface2);
-    }
-
-    .dp-icon-wrap.status-error {
-      background: var(--red-dim);
-    }
-
-    .dp-icon-wrap.status-disconnected {
-      background: rgba(84, 110, 122, .1);
-    }
-
-    .dp-title-group {
-      flex: 1;
-      min-width: 0;
-    }
-
-    .dp-name {
-      font-size: .95rem;
-      font-weight: 700;
-      color: var(--on-surface);
-    }
-
-    .dp-meta {
-      display: flex;
-      gap: 6px;
-      margin-top: 4px;
-      flex-wrap: wrap;
-    }
-
-    .dp-type-badge {
-      font-size: .6rem;
-      font-weight: 600;
-      background: var(--teal-dim);
-      color: var(--teal-light);
-      border-radius: 20px;
-      padding: 2px 8px;
-    }
-
-    .dp-status-badge {
-      font-size: .6rem;
-      font-weight: 700;
-      border-radius: 20px;
-      padding: 2px 8px;
-    }
-
-    .dp-grid-pos {
-      font-size: .62rem;
-      color: var(--on-muted);
-      margin-top: 4px;
-    }
-
-    .dp-close {
-      background: none;
-      border: none;
-      color: var(--on-muted);
-      cursor: pointer;
-      font-size: 1.1rem;
-      padding: 4px;
-      flex-shrink: 0;
-      transition: color .15s;
-    }
-
-    .dp-close:hover {
-      color: var(--on-surface);
-    }
-
-    .detail-section {
-      padding: 16px 18px;
-      border-bottom: 1px solid rgba(255, 255, 255, .04);
-    }
-
-    .detail-section-title {
-      font-size: .72rem;
-      font-weight: 700;
-      letter-spacing: .08em;
-      text-transform: uppercase;
-      color: var(--on-muted);
-      margin-bottom: 12px;
-    }
-
-    /* Iron timer */
-    .iron-timer-display {
-      display: flex;
-      align-items: center;
-      gap: 16px;
-    }
-
-    .iron-timer-ring {
-      position: relative;
-      width: 80px;
-      height: 80px;
-      flex-shrink: 0;
-    }
-
-    .ring-svg {
-      transform: rotate(-90deg);
-    }
-
-    .ring-track {
-      fill: none;
-      stroke: rgba(255, 255, 255, .08);
-      stroke-width: 5;
-    }
-
-    .ring-fill {
-      fill: none;
-      stroke: var(--amber);
-      stroke-width: 5;
-      stroke-linecap: round;
-      transition: stroke-dashoffset .8s ease;
-    }
-
-    .ring-danger {
-      stroke: var(--red);
-    }
-
-    .ring-label {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-    }
-
-    .ring-min {
-      font-size: .85rem;
-      font-weight: 800;
-      color: var(--on-surface);
-      line-height: 1;
-    }
-
-    .ring-sec {
-      font-size: .6rem;
-      color: var(--on-muted);
-    }
-
-    .iron-timer-info {
-      flex: 1;
-    }
-
-    .timer-row {
-      display: flex;
-      justify-content: space-between;
-      font-size: .75rem;
-      margin-bottom: 6px;
-      color: var(--on-muted);
-    }
-
-    .timer-row strong {
-      color: var(--on-surface);
-    }
-
-    .text-danger {
-      color: var(--red) !important;
-    }
-
-    .text-ok {
-      color: var(--green) !important;
-    }
-
-    .iron-timer-display.danger .ring-min,
-    .iron-timer-display.danger .ring-sec {
-      color: var(--red);
-    }
-
-    /* Light schedule */
-    .schedule-display {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-
-    .schedule-card {
-      flex: 1;
-      text-align: center;
-      border-radius: 10px;
-      padding: 10px;
-    }
-
-    .on-card {
-      background: var(--green-dim);
-      border: 1px solid rgba(0, 230, 118, .2);
-    }
-
-    .off-card {
-      background: rgba(84, 110, 122, .1);
-      border: 1px solid rgba(84, 110, 122, .2);
-    }
-
-    .sched-label {
-      font-size: .62rem;
-      color: var(--on-muted);
-    }
-
-    .sched-time {
-      font-size: 1.1rem;
-      font-weight: 700;
-      color: var(--on-surface);
-      margin-top: 2px;
-    }
-
-    .schedule-arrow {
-      font-size: 1rem;
-      color: var(--on-muted);
-    }
-
-    .schedule-note {
-      font-size: .68rem;
-      color: var(--on-muted);
-    }
-
-    .schedule-none {
-      font-size: .8rem;
-      color: var(--on-muted);
-      font-style: italic;
-    }
-
-    /* Camera */
-    .camera-snapshot-wrap {
-      border-radius: 10px;
-      overflow: hidden;
-      margin-bottom: 10px;
-    }
-
-    .camera-snapshot {
-      width: 100%;
-      max-height: 180px;
-      object-fit: cover;
-      display: block;
-    }
-
-    .camera-placeholder {
-      background: var(--surface2);
-      border-radius: 10px;
-      padding: 24px;
-      text-align: center;
-      color: var(--on-muted);
-      font-size: .82rem;
-      margin-bottom: 10px;
-    }
-
-    .stream-url-card {
-      display: flex;
-      align-items: flex-start;
-      gap: 10px;
-      background: var(--teal-dim);
-      border: 1px solid rgba(0, 188, 212, .15);
-      border-radius: 10px;
-      padding: 10px 12px;
-    }
-
-    .stream-icon {
-      font-size: 1rem;
-      flex-shrink: 0;
-    }
-
-    .stream-label {
-      font-size: .62rem;
-      color: var(--on-muted);
-    }
-
-    .stream-value {
-      font-size: .7rem;
-      color: var(--teal-light);
-      word-break: break-all;
-      margin-top: 2px;
-    }
-
-    /* Multi-switch */
-    .switches-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .switch-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: var(--surface2);
-      border-radius: 8px;
-      padding: 8px 12px;
-    }
-
-    .switch-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      flex-shrink: 0;
-    }
-
-    .dot-on {
-      background: var(--green);
-    }
-
-    .dot-off {
-      background: var(--grey);
-    }
-
-    .switch-label {
-      font-size: .8rem;
-      color: var(--on-surface);
-      flex: 1;
-    }
-
-    .switch-status-badge {
-      font-size: .6rem;
-      font-weight: 700;
-      border-radius: 20px;
-      padding: 2px 7px;
-    }
-
-    .badge-on {
-      background: var(--green-dim);
-      color: var(--green);
-    }
-
-    .badge-off {
-      background: rgba(84, 110, 122, .2);
-      color: #90A4AE;
-    }
-
-    .badge-cutoff,
-    .badge-cutoff {
-      background: var(--red-dim);
-      color: var(--red);
-    }
-
-    .badge-schedule-on {
-      background: rgba(0, 188, 212, .15);
-      color: var(--teal-light);
-    }
-
-    .badge-schedule-off {
-      background: rgba(84, 110, 122, .15);
-      color: #90A4AE;
-    }
-
-    .switch-toggle-btn {
-      font-size: .65rem;
-      font-weight: 600;
-      background: var(--surface);
-      border: 1px solid rgba(0, 188, 212, .2);
-      color: var(--teal);
-      border-radius: 6px;
-      padding: 3px 8px;
-      cursor: pointer;
-      transition: all .15s;
-      font-family: var(--font);
-    }
-
-    .switch-toggle-btn:hover {
-      background: var(--teal-dim);
-    }
-
-    .switch-empty {
-      font-size: .8rem;
-      color: var(--on-muted);
-    }
-
-    /* Outlet */
-    .outlet-info {
-      background: var(--surface2);
-      border-radius: 10px;
-      padding: 12px 16px;
-    }
-
-    .outlet-status-row {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      font-size: .8rem;
-      color: var(--on-muted);
-    }
-
-    /* Controls */
-    .dp-controls {
-      padding: 12px 18px;
-      border-bottom: 1px solid rgba(255, 255, 255, .04);
-    }
-
-    .dp-toggle-btn {
-      width: 100%;
-      padding: 12px;
-      border-radius: 10px;
-      font-size: .88rem;
-      font-weight: 700;
-      cursor: pointer;
-      border: 1px solid;
-      font-family: var(--font);
-      transition: all .15s;
-    }
-
-    .dp-toggle-btn:disabled {
-      opacity: .5;
-      cursor: not-allowed;
-    }
-
-    .btn-on {
-      background: var(--green-dim);
-      border-color: rgba(0, 230, 118, .3);
-      color: var(--green);
-    }
-
-    .btn-on:hover:not(:disabled) {
-      background: rgba(0, 230, 118, .25);
-    }
-
-    .btn-off {
-      background: var(--red-dim);
-      border-color: rgba(255, 82, 82, .3);
-      color: var(--red);
-    }
-
-    .btn-off:hover:not(:disabled) {
-      background: rgba(255, 82, 82, .25);
-    }
-
-    /* Panel logs */
-    .dp-log-section {
-      padding: 12px 18px;
-      flex: 1;
-      overflow-y: auto;
-    }
-
-    .dp-log-title {
-      font-size: .65rem;
-      font-weight: 700;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--on-muted);
-      margin-bottom: 8px;
-    }
-
-    .dp-log-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 6px 0;
-      border-bottom: 1px solid rgba(255, 255, 255, .03);
-      font-size: .72rem;
-    }
-
-    .dp-log-icon {
-      font-size: .8rem;
-    }
-
-    .dp-log-event {
-      font-size: .6rem;
-      font-weight: 700;
-      border-radius: 20px;
-      padding: 2px 7px;
-    }
-
-    .dp-log-time {
-      margin-left: auto;
-      font-size: .6rem;
-      color: var(--on-muted);
-      white-space: nowrap;
-    }
-
-    .dp-log-empty {
-      font-size: .75rem;
-      color: var(--on-muted);
-      text-align: center;
-      padding: 12px 0;
-    }
-
-    /* ── Log panel ────────────────────────────────────────────────────────────── */
-    .log-panel {
-      width: var(--log-w);
-      border-left: 1px solid rgba(0, 188, 212, 0.1);
-      background: var(--surface);
-      display: flex;
-      flex-direction: column;
-      overflow: hidden;
-      flex-shrink: 0;
-    }
-
-    .log-panel-header {
-      padding: 10px 14px 6px;
-      border-bottom: 1px solid rgba(255, 255, 255, .05);
-      flex-shrink: 0;
-    }
-
-    .log-panel-title {
-      font-size: .65rem;
-      font-weight: 700;
-      letter-spacing: .1em;
-      text-transform: uppercase;
-      color: var(--on-muted);
-      margin-bottom: 8px;
-    }
-
-    .log-filters {
-      display: flex;
-      gap: 4px;
-      flex-wrap: wrap;
-    }
-
-    .log-filter-btn {
-      font-size: .6rem;
-      font-weight: 600;
-      border-radius: 20px;
-      padding: 3px 9px;
-      background: var(--surface2);
-      border: 1px solid rgba(255, 255, 255, .08);
-      color: var(--on-muted);
-      cursor: pointer;
-      font-family: var(--font);
-      transition: all .15s;
-    }
-
-    .log-filter-btn.active,
-    .log-filter-btn:hover {
-      background: var(--teal-dim);
-      border-color: rgba(0, 188, 212, .3);
-      color: var(--teal-light);
-    }
-
-    #logs-container {
-      flex: 1;
-      overflow-y: auto;
-      padding: 6px 0;
-    }
-
-    .log-entry {
-      display: grid;
-      grid-template-columns: 20px 1fr auto;
-      gap: 8px;
-      align-items: start;
-      padding: 8px 12px;
-      border-bottom: 1px solid rgba(255, 255, 255, .03);
-      font-size: .73rem;
-    }
-
-    .log-entry:hover {
-      background: rgba(0, 188, 212, .04);
-    }
-
-    .log-icon {
-      font-size: .82rem;
-      padding-top: 1px;
-    }
-
-    .log-body {
-      line-height: 1.4;
-      color: var(--on-muted);
-    }
-
-    .log-body strong {
-      color: var(--on-surface);
-      font-weight: 600;
-    }
-
-    .log-body small {
-      font-size: .63rem;
-      color: var(--on-muted);
-    }
-
-    .log-time {
-      font-size: .6rem;
-      color: var(--on-muted);
-      white-space: nowrap;
-      padding-top: 2px;
-    }
-
-    .log-badge {
-      display: inline-block;
-      font-size: .58rem;
-      font-weight: 700;
-      border-radius: 50px;
-      padding: 1px 6px;
-      margin-left: 4px;
-      vertical-align: middle;
-    }
-
-    .log-empty {
-      padding: 16px 14px;
-      color: var(--on-muted);
-      font-size: .78rem;
-      line-height: 1.5;
-    }
-
-    /* Scrollbar */
-    ::-webkit-scrollbar {
-      width: 4px;
-    }
-
-    ::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    ::-webkit-scrollbar-thumb {
-      background: rgba(0, 188, 212, .2);
-      border-radius: 4px;
-    }
-
-    /* ── Auth Overlay ────────────────────────────────────────────────────────── */
-    .auth-overlay {
-      position: fixed;
-      inset: 0;
-      background: var(--bg);
-      z-index: 1000;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 20px;
-    }
-
-    .auth-overlay.hidden {
-      display: none;
-    }
-
-    .auth-card {
-      width: 100%;
-      max-width: 400px;
-      background: var(--surface);
-      border: 1px solid rgba(0, 188, 212, 0.2);
-      border-radius: 20px;
-      padding: 32px;
-      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
-    }
-
-    .auth-header {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 32px;
-    }
-
-    .auth-title {
-      font-size: 1.5rem;
-      font-weight: 800;
-      margin-bottom: 8px;
-    }
-
-    .auth-subtitle {
-      font-size: 0.85rem;
-      color: var(--on-muted);
-      margin-bottom: 24px;
-    }
-
-    .auth-input {
-      width: 100%;
-      background: var(--bg);
-      border: 1px solid rgba(255,255,255,0.1);
-      color: var(--on-surface);
-      padding: 14px 16px;
-      border-radius: 12px;
-      margin-bottom: 12px;
-      font-family: inherit;
-      outline: none;
-    }
-
-    .auth-input:focus {
-      border-color: var(--teal);
-    }
-
-    .auth-btn {
-      width: 100%;
-      background: var(--teal);
-      color: var(--bg);
-      border: none;
-      padding: 14px;
-      border-radius: 12px;
-      font-weight: 700;
-      font-size: 1rem;
-      cursor: pointer;
-      margin-top: 8px;
-      transition: opacity 0.2s;
-    }
-
-    .auth-btn:hover {
-      opacity: 0.9;
-    }
-
-    .auth-switch {
-      text-align: center;
-      margin-top: 20px;
-      font-size: 0.85rem;
-      color: var(--on-muted);
-    }
-
-    .auth-switch a {
-      color: var(--teal);
-      text-decoration: none;
-      font-weight: 600;
-    }
-
-    .auth-error {
-      background: var(--red-dim);
-      color: var(--red);
-      padding: 12px;
-      border-radius: 8px;
-      font-size: 0.8rem;
-      margin-bottom: 20px;
-      border: 1px solid rgba(255, 82, 82, 0.2);
-    }
-
-    .auth-footer {
-      margin-top: 32px;
-      text-align: center;
-      font-size: 0.7rem;
-      color: var(--on-muted);
-      opacity: 0.6;
-    }
-
-    .topbar-user {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-right: 20px;
-      padding-right: 20px;
-      border-right: 1px solid rgba(255,255,255,0.1);
-    }
-
-    .user-email {
-      font-size: 0.75rem;
-      font-weight: 600;
-      color: var(--on-muted);
-    }
-
-    .logout-btn {
-      background: transparent;
-      border: 1px solid rgba(255, 82, 82, 0.4);
-      color: var(--red);
-      font-size: 0.65rem;
-      font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-
-    .logout-btn:hover {
-      background: var(--red-dim);
-    }
+      --bg: #E8EAED;
+      --surface: #FFFFFF;
+      --primary: #37474F;
+      --primary-container: #ECEFF1;
+      --on-primary: #FFFFFF;
+      --secondary: #607D8B;
+      --border: #CFD8DC;
+      --outline: #ECEFF1;
+      --text: #1A1D21;
+      --text-muted: #607D8B;
+      --green: #81C784;
+      --red: #E57373;
+      --font: 'Inter', sans-serif;
+    }
+
+    [data-theme='dark'] {
+      --bg: #101214;
+      --surface: #1A1D21;
+      --primary: #B0BEC5;
+      --primary-container: #2C3135;
+      --on-primary: #101214;
+      --secondary: #455A64;
+      --border: #2C3135;
+      --outline: #1A1D21;
+      --text: #F1F3F4;
+      --text-muted: #B0BEC5;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: var(--font); background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; overflow: hidden; transition: background 0.3s, color 0.3s; }
+
+    .topbar { background: var(--surface); padding: 0 24px; height: 64px; display: flex; align-items: center; border-bottom: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+    .topbar-brand { font-weight: 700; font-size: 1rem; color: var(--primary); letter-spacing: -0.01em; }
+    .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 16px; }
+
+    .theme-btn { background: var(--primary-container); border: 1px solid var(--border); width: 36px; height: 36px; border-radius: 10px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+
+    .statsbar { background: var(--surface); padding: 12px 24px; display: flex; gap: 12px; border-bottom: 1px solid var(--border); }
+    .stat-item { padding: 6px 14px; background: var(--bg); border-radius: 8px; font-size: 0.75rem; font-weight: 700; border: 1px solid var(--border); letter-spacing: 0.02em; }
+
+    .layout { flex: 1; display: flex; overflow: hidden; padding: 16px; gap: 16px; }
+
+    .sidebar { width: 260px; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow-y: auto; display: flex; flex-direction: column; }
+    .sidebar-header { padding: 20px; font-size: 0.65rem; text-transform: uppercase; font-weight: 800; color: var(--text-muted); border-bottom: 1px solid var(--border); letter-spacing: 0.1em; }
+    .sidebar-item { padding: 16px 20px; cursor: pointer; transition: all 0.2s; border-bottom: 1px solid var(--outline); position: relative; }
+    .sidebar-item.active { background: var(--primary-container); color: var(--primary); }
+    .sidebar-item.active::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--primary); }
+    .sidebar-label { display: block; font-size: 0.9rem; font-weight: 600; }
+    .sidebar-count { font-size: 0.7rem; opacity: 0.7; }
+
+    .main { flex: 1; background: var(--surface); border: 1px solid var(--border); border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+    .main-header { padding: 24px; border-bottom: 1px solid var(--border); background: var(--surface); }
+    .main-header h1 { font-size: 1.3rem; font-weight: 700; color: var(--primary); }
+
+    .content-split { flex: 1; display: flex; overflow: hidden; }
+    .grid-panel { flex: 1; padding: 32px; display: flex; justify-content: center; align-items: center; background: var(--bg); }
+    .floor-wrap { width: 100%; max-width: 520px; aspect-ratio: 1; border: 1.5px solid var(--border); border-radius: 12px; background: var(--surface); padding: 12px; box-shadow: 0 10px 25px rgba(0,0,0,0.03); }
+
+    #grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; width: 100%; height: 100%; }
+    .grid-cell { aspect-ratio: 1; border: 1px solid var(--outline); border-radius: 8px; display: flex; align-items: center; justify-content: center; position: relative; background: var(--surface); transition: transform 0.15s; }
+    .grid-cell.has-device { cursor: pointer; background: var(--primary-container); border-color: var(--border); }
+    .grid-cell.has-device:hover { transform: scale(1.03); z-index: 1; }
+    .cell-placeholder { font-size: 1rem; color: var(--border); opacity: 0.4; }
+    .cell-inner { display: flex; flex-direction: column; align-items: center; gap: 1px; }
+    .cell-icon { font-size: 1.4rem; }
+    .cell-name { font-size: 0.55rem; font-weight: 700; color: var(--text-muted); text-transform: uppercase; text-align: center; max-width: 90%; overflow: hidden; }
+    .cell-dot { position: absolute; top: 6px; right: 6px; width: 6px; height: 6px; border-radius: 50%; background: var(--border); }
+    .status-on .cell-dot { background: var(--green); box-shadow: 0 0 6px var(--green); }
+
+    .log-panel { width: 300px; border-left: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; }
+    .log-entry { padding: 14px 20px; border-bottom: 1px solid var(--outline); display: flex; justify-content: space-between; align-items: center; }
+    .log-entry strong { display: block; font-size: 0.85rem; color: var(--primary); }
+    .log-entry span { font-size: 0.7rem; color: var(--text-muted); font-weight: 600; text-transform: uppercase; }
+    .log-time { font-size: 0.7rem; color: var(--text-muted); font-family: monospace; }
+
+    .detail-panel { width: 0; background: var(--surface); border-left: 1px solid var(--border); transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1); overflow: hidden; display: flex; flex-direction: column; }
+    .detail-panel.open { width: 340px; }
+    .dp-header { padding: 24px; border-bottom: 1px solid var(--border); position: relative; }
+    .dp-name { font-size: 1.1rem; font-weight: 700; color: var(--primary); }
+    .dp-meta { font-size: 0.7rem; color: var(--text-muted); margin-top: 4px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; }
+    .dp-close { position: absolute; top: 24px; right: 24px; background: none; border: none; cursor: pointer; color: var(--text-muted); font-size: 1.2rem; }
+    .dp-body { padding: 24px; display: flex; flex-direction: column; gap: 24px; }
+
+    .primary-btn { width: 100%; padding: 16px; border-radius: 12px; border: none; font-weight: 700; font-size: 1rem; cursor: pointer; transition: all 0.2s; }
+    .btn-on { background: var(--primary); color: var(--on-primary); }
+    .btn-off { background: var(--red); color: white; }
+    .code-block { background: var(--bg); padding: 12px; border-radius: 8px; border: 1px solid var(--border); font-family: monospace; font-size: 0.75rem; color: var(--text-muted); word-break: break-all; }
+
+    .auth-overlay { position: fixed; inset: 0; background: var(--bg); z-index: 1000; display: flex; align-items: center; justify-content: center; }
+    .auth-overlay.hidden { display: none; }
+    .auth-card { width: 100%; max-width: 380px; background: var(--surface); padding: 40px; border-radius: 24px; border: 1px solid var(--border); box-shadow: 0 20px 50px rgba(0,0,0,0.1); }
+    .auth-input { width: 100%; padding: 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--bg); color: var(--text); margin-bottom: 12px; outline: none; transition: border-color 0.2s; }
+    .auth-input:focus { border-color: var(--primary); }
+    .auth-btn { width: 100%; padding: 16px; border-radius: 12px; border: none; background: var(--primary); color: var(--on-primary); font-weight: 700; cursor: pointer; }
+    .auth-error { padding: 12px; background: rgba(229, 115, 115, 0.1); color: var(--red); border-radius: 10px; font-size: 0.8rem; margin-bottom: 20px; border: 1px solid var(--red); }
   </style>
 </head>
 
-<body>
+<body data-theme="light">
 
-  <!-- Top bar -->
   <header class="topbar">
-    <div class="topbar-accent"></div>
-    <div class="topbar-brand">
-      <div class="name">Smart Home</div>
-      <div class="sub">Hardware Simulator Dashboard</div>
-    </div>
+    <div class="topbar-brand">Smart Home Console</div>
     <div class="topbar-right">
-      <div id="topbar-user" class="topbar-user" style="display:none">
-        <span id="user-email" class="user-email"></span>
-        <button id="logout-btn" class="logout-btn">Logout</button>
+      <button id="theme-toggle" class="theme-btn" title="Toggle Theme"><span id="theme-icon">🌙</span></button>
+      <div id="topbar-user" style="display:none; align-items:center; gap:16px; border-left:1px solid var(--border); padding-left:16px">
+        <span id="user-email" style="font-size:0.8rem; font-weight:600; color:var(--text-muted)"></span>
+        <button id="logout-btn" style="background:none; border:1px solid var(--red); color:var(--red); padding:5px 12px; border-radius:8px; cursor:pointer; font-size:0.7rem; font-weight:700">Exit</button>
       </div>
-      <div class="topbar-badge">SCS 3311 Mini-Project</div>
-      <div class="live-dot"></div>
-      <div class="live-label">Live · Firestore</div>
     </div>
   </header>
 
-  <!-- Stats bar -->
   <div class="statsbar">
-    <div class="stat-item stat-total">
-      <span class="stat-icon">🏠</span>
-      <span class="stat-label">Total</span>
-      <span class="stat-value" id="stat-total">0</span>
-    </div>
-    <div class="stat-item stat-on">
-      <span class="stat-icon">🟢</span>
-      <span class="stat-label">ON</span>
-      <span class="stat-value" id="stat-on">0</span>
-    </div>
-    <div class="stat-item stat-off">
-      <span class="stat-icon">⚫</span>
-      <span class="stat-label">OFF</span>
-      <span class="stat-value" id="stat-off">0</span>
-    </div>
-    <div class="stat-item stat-cutoffs">
-      <span class="stat-icon">🔥</span>
-      <span class="stat-label">Cutoffs</span>
-      <span class="stat-value" id="stat-cutoffs">0</span>
-    </div>
-    <div class="statsbar-right">Click a device cell to inspect &amp; control</div>
+    <div class="stat-item">UNITS: <span id="stat-total">0</span></div>
+    <div class="stat-item" style="color:var(--green)">ACTIVE: <span id="stat-on">0</span></div>
+    <div class="stat-item">STANDBY: <span id="stat-off">0</span></div>
   </div>
 
-  <!-- Alert banner (iron cutoff) -->
-  <div id="alert-banner" class="alert-banner">
-    <span id="alert-msg"></span>
-    <span id="alert-close" class="alert-close" title="Dismiss">✕</span>
-  </div>
-
-  <!-- Layout -->
   <div class="layout">
-
-    <!-- Sidebar — floor plan list -->
     <aside class="sidebar">
-      <div class="sidebar-header">Floor Plans</div>
+      <div class="sidebar-header">Zone Directory</div>
       <div id="sidebar-list"></div>
     </aside>
 
-    <!-- Main content -->
     <main class="main">
       <div class="main-header">
-        <div class="main-header-text">
-          <h1 id="header-title">Loading…</h1>
-          <p id="header-sub">Connecting to Firestore</p>
-        </div>
-      </div>
-
-      <!-- Legend -->
-      <div class="legend">
-        <div class="legend-item">
-          <div class="legend-dot dot-on"></div>ON
-        </div>
-        <div class="legend-item">
-          <div class="legend-dot dot-off"></div>OFF
-        </div>
-        <div class="legend-item">
-          <div class="legend-dot dot-err"></div>ERROR
-        </div>
-        <div class="legend-item">
-          <div class="legend-dot dot-disc"></div>N/A
-        </div>
-        <div class="legend-item">♨️ Iron</div>
-        <div class="legend-item">💡 Light</div>
-        <div class="legend-item">📷 Camera</div>
-        <div class="legend-item">🔀 Multi-Switch</div>
-        <div class="legend-item">🔌 Outlet</div>
-        <div class="legend-hint">Click a device to control</div>
+        <h1 id="header-title">Select Zone</h1>
+        <p id="header-sub" style="font-size:0.8rem; color:var(--text-muted)">Awaiting connection to hardware...</p>
       </div>
 
       <div class="content-split">
-        <!-- Grid panel -->
         <div class="grid-panel">
-          <div class="floor-wrap">
-            <div id="grid"></div>
-          </div>
+          <div class="floor-wrap"><div id="grid"></div></div>
         </div>
 
-        <!-- Detail panel (expands on device click) -->
         <div class="detail-panel" id="detail-panel"></div>
 
-        <!-- Event log -->
         <div class="log-panel">
-          <div class="log-panel-header">
-            <div class="log-panel-title">📋 Event Log</div>
-            <div class="log-filters">
-              <button class="log-filter-btn active" data-filter="ALL">All</button>
-              <button class="log-filter-btn" data-filter="ON">ON</button>
-              <button class="log-filter-btn" data-filter="OFF">OFF</button>
-              <button class="log-filter-btn" data-filter="CUTOFF">Cutoff</button>
-              <button class="log-filter-btn" data-filter="SCHEDULE">Schedule</button>
-            </div>
-          </div>
-          <div id="logs-container"></div>
+          <div class="sidebar-header">Live Telemetry</div>
+          <div id="logs-container" style="flex:1; overflow-y:auto"></div>
         </div>
       </div>
     </main>
   </div>
 
-  <!-- Auth Overlay -->
   <div id="auth-overlay" class="auth-overlay">
     <div class="auth-card">
-      <div class="auth-header">
-        <div class="topbar-accent"></div>
-        <div class="topbar-brand">
-          <div class="name">Smart Home</div>
-          <div class="sub">Hardware Simulator Login</div>
-        </div>
-      </div>
-
       <div id="auth-error" class="auth-error" style="display:none"></div>
-
       <div id="login-form">
-        <h2 class="auth-title">Welcome Back</h2>
-        <p class="auth-subtitle">Log in to manage your smart home</p>
-        <input type="email" id="login-email" placeholder="Email Address" class="auth-input" />
-        <input type="password" id="login-password" placeholder="Password" class="auth-input" />
-        <button id="login-btn" class="auth-btn">Sign In</button>
-        <p class="auth-switch">Don't have an account? <a href="#" id="show-signup">Sign Up</a></p>
+        <h2 style="margin-bottom:8px; font-weight:800">System Access</h2>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:32px">Operator identity verification</p>
+        <input type="email" id="login-email" placeholder="Email Identity" class="auth-input" />
+        <input type="password" id="login-password" placeholder="Access Key" class="auth-input" />
+        <button id="login-btn" class="auth-btn">Authorize</button>
+        <p style="text-align:center; margin-top:24px; font-size:0.85rem">New Operator? <a href="#" id="show-signup" style="color:var(--text); font-weight:700">Register</a></p>
       </div>
-
       <div id="signup-form" style="display:none">
-        <h2 class="auth-title">Create Account</h2>
-        <p class="auth-subtitle">Start your smart home journey</p>
-        <input type="email" id="signup-email" placeholder="Email Address" class="auth-input" />
-        <input type="password" id="signup-password" placeholder="Password" class="auth-input" />
-        <input type="password" id="signup-confirm" placeholder="Confirm Password" class="auth-input" />
-        <button id="signup-btn" class="auth-btn">Sign Up</button>
-        <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign In</a></p>
-      </div>
-
-      <div class="auth-footer">
-        Use the same credentials as the Android app
+        <h2 style="margin-bottom:8px; font-weight:800">New ID</h2>
+        <p style="font-size:0.85rem; color:var(--text-muted); margin-bottom:32px">Create your Smart Home credentials</p>
+        <input type="email" id="signup-email" placeholder="Email Identity" class="auth-input" />
+        <input type="password" id="signup-password" placeholder="Access Key" class="auth-input" />
+        <input type="password" id="signup-confirm" placeholder="Confirm Key" class="auth-input" />
+        <button id="signup-btn" class="auth-btn">Register</button>
+        <p style="text-align:center; margin-top:24px; font-size:0.85rem">Existing Operator? <a href="#" id="show-login" style="color:var(--text); font-weight:700">Sign In</a></p>
       </div>
     </div>
   </div>

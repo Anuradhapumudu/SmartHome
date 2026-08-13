@@ -50,7 +50,6 @@ import java.util.Locale
 @Composable
 fun FloorPlanListScreen(
     onFloorPlanClick: (String) -> Unit = {},
-    onOpenDrawer: () -> Unit = {},
     viewModel: FloorPlanViewModel = viewModel()
 ) {
     val floorPlans by viewModel.floorPlans.collectAsStateWithLifecycle()
@@ -58,89 +57,55 @@ fun FloorPlanListScreen(
 
     var showAddDialog by remember { mutableStateOf(false) }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "My Residence",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Control your environment",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(
-                            imageVector = Icons.Outlined.Menu,
-                            contentDescription = "Menu",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
+        when {
+            isLoading -> {
+                CircularProgressIndicator(
+                    modifier = Modifier.align(Alignment.Center),
+                    color = MaterialTheme.colorScheme.primary
                 )
-            )
-        },
-        floatingActionButton = {
-            ExtendedFloatingActionButton(
-                onClick = { showAddDialog = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp),
-                icon = { Icon(Icons.Filled.Add, contentDescription = null) },
-                text = { Text("New Floor") }
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
+            }
 
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-        ) {
-            when {
-                isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center),
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
+            floorPlans.isEmpty() -> {
+                EmptyFloorPlansState(
+                    modifier = Modifier.align(Alignment.Center),
+                    onAddClick = { showAddDialog = true }
+                )
+            }
 
-                floorPlans.isEmpty() -> {
-                    EmptyFloorPlansState(
-                        modifier = Modifier.align(Alignment.Center),
-                        onAddClick = { showAddDialog = true }
-                    )
-                }
-
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 12.dp),
-                        verticalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        items(floorPlans, key = { it.id }) { plan ->
-                            FloorPlanCard(
-                                floorPlan = plan,
-                                onClick = { onFloorPlanClick(plan.id) },
-                                onDelete = { viewModel.deleteFloorPlan(plan.id) }
-                            )
-                        }
-                        item { Spacer(modifier = Modifier.height(80.dp)) }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    items(floorPlans, key = { it.id }) { plan ->
+                        FloorPlanCard(
+                            floorPlan = plan,
+                            onClick = { onFloorPlanClick(plan.id) },
+                            onDelete = { viewModel.deleteFloorPlan(plan.id) }
+                        )
                     }
+                    item { Spacer(modifier = Modifier.height(80.dp)) }
                 }
             }
         }
+
+        ExtendedFloatingActionButton(
+            onClick = { showAddDialog = true },
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            shape = RoundedCornerShape(12.dp),
+            icon = { Icon(Icons.Filled.Add, contentDescription = null) },
+            text = { Text("New Zone") },
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(24.dp)
+        )
     }
 
     if (showAddDialog) {
@@ -236,7 +201,7 @@ private fun FloorPlanCard(
                     onDelete()
                     showDeleteConfirm = false
                 }) {
-                    Text("Remove", color = MaterialTheme.colorScheme.error)
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
                 }
             },
             dismissButton = {

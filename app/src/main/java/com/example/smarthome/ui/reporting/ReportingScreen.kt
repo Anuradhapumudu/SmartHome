@@ -46,7 +46,6 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ReportingScreen(
-    onOpenDrawer: () -> Unit = {},
     viewModel: ReportingViewModel = viewModel()
 ) {
     val logs by viewModel.filteredLogs.collectAsStateWithLifecycle()
@@ -55,99 +54,66 @@ fun ReportingScreen(
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val selectedFilter by viewModel.selectedFilter.collectAsStateWithLifecycle()
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = "Analytics",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Insights into your home",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onOpenDrawer) {
-                        Icon(
-                            imageVector = Icons.Outlined.Menu,
-                            contentDescription = "Menu",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { padding ->
-
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)
+    ) {
         if (isLoading) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentAlignment = Alignment.Center
+            CircularProgressIndicator(
+                modifier = Modifier.align(Alignment.Center),
+                color = MaterialTheme.colorScheme.primary
+            )
+        } else {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-            }
-            return@Scaffold
-        }
-
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
-        ) {
-            item {
-                SectionHeader(title = "Weekly Activity", icon = Icons.Outlined.BarChart)
-            }
-            item {
-                WeeklyBarChart(days = weekChart)
-            }
-
-            if (summaries.isNotEmpty()) {
                 item {
-                    SectionHeader(title = "Usage Leaderboard", icon = Icons.AutoMirrored.Outlined.TrendingUp)
+                    SectionHeader(title = "Weekly Activity", icon = Icons.Outlined.BarChart)
                 }
                 item {
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        contentPadding = PaddingValues(horizontal = 2.dp)
-                    ) {
-                        items(summaries.take(8)) { summary ->
-                            DeviceSummaryCard(summary = summary)
+                    WeeklyBarChart(days = weekChart)
+                }
+
+                if (summaries.isNotEmpty()) {
+                    item {
+                        SectionHeader(title = "Usage Leaderboard", icon = Icons.AutoMirrored.Outlined.TrendingUp)
+                    }
+                    item {
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            contentPadding = PaddingValues(horizontal = 2.dp)
+                        ) {
+                            items(summaries.take(8)) { summary ->
+                                DeviceSummaryCard(summary = summary)
+                            }
                         }
                     }
                 }
-            }
 
-            item {
-                SectionHeader(title = "History", icon = Icons.AutoMirrored.Outlined.List)
-            }
-
-            item {
-                EventFilterRow(
-                    selectedFilter = selectedFilter,
-                    onSelect = { viewModel.setFilter(it) }
-                )
-            }
-
-            if (logs.isEmpty()) {
                 item {
-                    EmptyLogState()
+                    SectionHeader(title = "History", icon = Icons.AutoMirrored.Outlined.List)
                 }
-            } else {
-                items(logs.take(100), key = { it.id }) { log ->
-                    LogEntry(log = log)
+
+                item {
+                    EventFilterRow(
+                        selectedFilter = selectedFilter,
+                        onSelect = { viewModel.setFilter(it) }
+                    )
                 }
-                item { Spacer(modifier = Modifier.height(80.dp)) }
+
+                if (logs.isEmpty()) {
+                    item {
+                        EmptyLogState()
+                    }
+                } else {
+                    items(logs.take(100), key = { it.id }) { log ->
+                        LogEntry(log = log)
+                    }
+                    item { Spacer(modifier = Modifier.height(80.dp)) }
+                }
             }
         }
     }

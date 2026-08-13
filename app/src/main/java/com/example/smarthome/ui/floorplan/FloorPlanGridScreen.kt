@@ -40,11 +40,9 @@ private const val GRID_ROWS = 8
 @Composable
 fun FloorPlanGridScreen(
     floorPlanId: String,
-    onBack: () -> Unit = {},
     viewModel: FloorPlanGridViewModel = viewModel()
 ) {
     val devices by viewModel.devices.collectAsStateWithLifecycle()
-    val floorPlan by viewModel.floorPlan.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     var showAddDevice by remember { mutableStateOf(false) }
@@ -62,46 +60,12 @@ fun FloorPlanGridScreen(
         devices.map { Pair(it.gridX, it.gridY) }.toSet()
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    Column {
-                        Text(
-                            text = floorPlan?.name ?: "Layout",
-                            style = MaterialTheme.typography.titleLarge,
-                            fontWeight = FontWeight.SemiBold,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "${devices.size} device${if (devices.size != 1) "s" else ""} connected",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = MaterialTheme.colorScheme.onSurface
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-            )
-        },
-        containerColor = MaterialTheme.colorScheme.background
-    ) { innerPadding ->
-
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             DeviceLegend()
 
             if (isLoading) {
@@ -264,7 +228,7 @@ private fun DeviceCell(device: Device, cellSize: Dp) {
 
 @Composable
 private fun DeviceLegend() {
-    val items = listOf(
+    val items = listOf<Pair<Color, String>>(
         SoftGreen to "On",
         SoftGrey to "Off",
         SoftRed to "Error"
