@@ -22,7 +22,7 @@ class FloorPlanViewModel : ViewModel() {
     init {
         viewModelScope.launch {
             repository.observeFloorPlans().collect { plans ->
-                _floorPlans.value = plans
+                _floorPlans.value = plans.sortedBy { it.createdAt?.seconds ?: 0L }
                 _isLoading.value = false
             }
         }

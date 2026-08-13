@@ -2,28 +2,30 @@ package com.example.smarthome.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Primary brand colors — deep teal/cyan palette
-val TealPrimary = Color(0xFF00BCD4)
-val TealPrimaryDark = Color(0xFF006064)
-val TealPrimaryLight = Color(0xFF4DD0E1)
-val TealContainer = Color(0xFF002B2E)
+// Serene Slate Palette - Calm & Professional
+val Slate800 = Color(0xFF37474F)
+val Slate700 = Color(0xFF455A64)
+val Slate600 = Color(0xFF546E7A)
+val Slate500 = Color(0xFF607D8B)
+val Slate200 = Color(0xFFB0BEC5)
+val Slate100 = Color(0xFFCFD8DC)
+val Slate50 = Color(0xFFECEFF1)
 
-// Accent
-val AmberAccent = Color(0xFFFFC107)
-val AmberContainer = Color(0xFF3D2C00)
+// Soft Accents
+val SoftTeal = Color(0xFF4DB6AC)
+val SoftTealDim = Color(0xFFB2DFDB)
+val SoftBlue = Color(0xFF64B5F6)
+val SoftBlueDim = Color(0xFFBBDEFB)
 
-// Status colors
-val StatusOn = Color(0xFF00E676)      // bright green
-val StatusOff = Color(0xFF546E7A)     // blue-grey
-val StatusError = Color(0xFFFF5252)   // red
-val StatusDisconnected = Color(0xFFBDBDBD) // grey
+// Status Colors (Muted)
+val SoftGreen = Color(0xFF81C784)
+val SoftRed = Color(0xFFE57373)
+val SoftAmber = Color(0xFFFFD54F)
+val SoftGrey = Color(0xFF90A4AE)
 
-// Backgrounds (dark theme)
-val BackgroundDark = Color(0xFF0A0E12)
-val SurfaceDark = Color(0xFF111820)
-val SurfaceVariantDark = Color(0xFF1C2630)
-val CardDark = Color(0xFF162028)
-
-// Text
-val OnSurface = Color(0xFFE0F7FA)
-val OnSurfaceVariant = Color(0xFF80DEEA)
+// Pure Shades
+val White = Color(0xFFFFFFFF)
+val OffWhite = Color(0xFFF5F7F8)
+val DarkCharcoal = Color(0xFF121416)
+val NearBlack = Color(0xFF1C1F22)
+val CardDark = Color(0xFF25292C)

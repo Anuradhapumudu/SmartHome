@@ -75,8 +75,10 @@ class ReportingViewModel : ViewModel() {
     }
 
     private fun recompute(logs: List<UsageLog>, filter: String?) {
-        val filtered = if (filter == null) logs
-        else logs.filter { it.event.contains(filter, ignoreCase = true) || it.deviceId.isNotEmpty() }
+        val sortedLogs = logs.sortedByDescending { it.safeTimestamp()?.seconds ?: 0L }
+        
+        val filtered = if (filter == null) sortedLogs
+        else sortedLogs.filter { it.event.contains(filter, ignoreCase = true) }
 
         _filteredLogs.value = filtered
 
@@ -97,8 +99,8 @@ class ReportingViewModel : ViewModel() {
 
         // Pair consecutive ON→OFF events per device to get duration
         val onEvents = mutableMapOf<String, Long>() // deviceId → turnedOnMs
-        logs.sortedBy { it.timestamp?.seconds ?: 0L }.forEach { log ->
-            val ts = log.timestamp?.seconds?.times(1000) ?: return@forEach
+        logs.sortedBy { it.safeTimestamp()?.seconds ?: 0L }.forEach { log ->
+            val ts = log.safeTimestamp()?.seconds?.times(1000) ?: return@forEach
             when (log.event) {
                 "ON", "SCHEDULE_ON" -> onEvents[log.deviceId] = ts
                 "OFF", "CUTOFF", "SCHEDULE_OFF" -> {
@@ -145,8 +147,8 @@ class ReportingViewModel : ViewModel() {
     private fun computeTodayMinutes(logs: List<UsageLog>, todayStart: Long): Long {
         var total = 0L
         var onTs: Long? = null
-        logs.sortedBy { it.timestamp?.seconds ?: 0L }.forEach { log ->
-            val ts = (log.timestamp?.seconds ?: 0L) * 1000
+        logs.sortedBy { it.safeTimestamp()?.seconds ?: 0L }.forEach { log ->
+            val ts = (log.safeTimestamp()?.seconds ?: 0L) * 1000
             if (ts < todayStart) {
                 // before today — track ON state
                 when (log.event) {

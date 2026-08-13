@@ -6,9 +6,9 @@ import com.example.smarthome.data.model.DeviceStatus
 import com.example.smarthome.data.model.FloorPlan
 import com.example.smarthome.data.model.UsageLog
 import com.google.firebase.Timestamp
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.ListenerRegistration
-import com.google.firebase.firestore.Query
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -25,23 +25,27 @@ import kotlinx.coroutines.tasks.await
 class FirestoreRepository {
 
     private val db = FirebaseFirestore.getInstance()
+    private val auth = FirebaseAuth.getInstance()
     private val floorPlansRef = db.collection("floorPlans")
     private val usageLogsRef = db.collection("usageLogs")
+
+    private val currentUid get() = auth.currentUser?.uid ?: ""
 
     // ──────────────────────────────────────────────────────────
     // FLOOR PLANS
     // ──────────────────────────────────────────────────────────
 
     /**
-     * Real-time stream of all floor plans.
+     * Real-time stream of all floor plans for the current user.
      * Automatically updates when Firestore changes.
      */
     fun observeFloorPlans(): Flow<List<FloorPlan>> = callbackFlow {
         val registration: ListenerRegistration = floorPlansRef
-            .orderBy("createdAt", Query.Direction.ASCENDING)
+            .whereEqualTo("userId", currentUid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e("FirestoreRepo", "observeFloorPlans error", error)
+                    trySend(emptyList()) // Ensure the flow doesn't hang
                     return@addSnapshotListener
                 }
                 val plans = snapshot?.documents?.mapNotNull { doc ->
@@ -54,7 +58,10 @@ class FirestoreRepository {
 
     suspend fun addFloorPlan(floorPlan: FloorPlan): String {
         val docRef = floorPlansRef.add(
-            floorPlan.copy(createdAt = Timestamp.now())
+            floorPlan.copy(
+                userId = currentUid,
+                createdAt = Timestamp.now()
+            )
         ).await()
         return docRef.id
     }
@@ -181,15 +188,21 @@ class FirestoreRepository {
 
     fun observeUsageLogs(limitDays: Int = 7): Flow<List<UsageLog>> = callbackFlow {
         val registration: ListenerRegistration = usageLogsRef
-            .orderBy("timestamp", Query.Direction.DESCENDING)
+            .whereEqualTo("userId", currentUid)
             .limit(200)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e("FirestoreRepo", "observeUsageLogs error", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val logs = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(UsageLog::class.java)?.copy(id = doc.id)
+                    try {
+                        doc.toObject(UsageLog::class.java)?.copy(id = doc.id)
+                    } catch (e: Exception) {
+                        Log.e("FirestoreRepo", "Error parsing log ${doc.id}", e)
+                        null
+                    }
                 } ?: emptyList()
                 trySend(logs)
             }
@@ -199,15 +212,20 @@ class FirestoreRepository {
     fun observeDeviceUsageLogs(deviceId: String): Flow<List<UsageLog>> = callbackFlow {
         val registration: ListenerRegistration = usageLogsRef
             .whereEqualTo("deviceId", deviceId)
-            .orderBy("timestamp", Query.Direction.DESCENDING)
             .limit(50)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e("FirestoreRepo", "observeDeviceUsageLogs error", error)
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val logs = snapshot?.documents?.mapNotNull { doc ->
-                    doc.toObject(UsageLog::class.java)?.copy(id = doc.id)
+                    try {
+                        doc.toObject(UsageLog::class.java)?.copy(id = doc.id)
+                    } catch (e: Exception) {
+                        Log.e("FirestoreRepo", "Error parsing log ${doc.id}", e)
+                        null
+                    }
                 } ?: emptyList()
                 trySend(logs)
             }
@@ -217,6 +235,7 @@ class FirestoreRepository {
     private suspend fun logUsage(device: Device, floorPlanId: String, event: String) {
         try {
             val log = UsageLog(
+                userId = currentUid,
                 deviceId = device.id,
                 deviceName = device.name,
                 floorPlanId = floorPlanId,

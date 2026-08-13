@@ -10,7 +10,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.outlined.Launch
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -30,12 +31,9 @@ import com.example.smarthome.data.model.DeviceType
 import com.example.smarthome.ui.theme.*
 import com.google.firebase.Timestamp
 import kotlinx.coroutines.delay
+import java.util.*
 import java.util.concurrent.TimeUnit
 
-/**
- * Bottom sheet showing device details and controls.
- * Handles all device types: OUTLET, MULTI_SWITCH, IRON, LIGHT, CAMERA.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DeviceDetailSheet(
@@ -52,15 +50,15 @@ fun DeviceDetailSheet(
     ModalBottomSheet(
         onDismissRequest = onDismiss,
         sheetState = sheetState,
-        containerColor = SurfaceDark,
+        containerColor = MaterialTheme.colorScheme.surface,
         dragHandle = {
             Box(
                 modifier = Modifier
                     .padding(vertical = 12.dp)
-                    .width(40.dp)
+                    .width(32.dp)
                     .height(4.dp)
                     .clip(CircleShape)
-                    .background(OnSurfaceVariant.copy(alpha = 0.4f))
+                    .background(MaterialTheme.colorScheme.outlineVariant)
             )
         }
     ) {
@@ -69,15 +67,11 @@ fun DeviceDetailSheet(
                 .fillMaxWidth()
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = 24.dp)
-                .padding(bottom = 40.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .padding(bottom = 32.dp),
+            verticalArrangement = Arrangement.spacedBy(24.dp)
         ) {
-            // Header
             DeviceSheetHeader(device = device)
 
-            HorizontalDivider(color = OnSurfaceVariant.copy(alpha = 0.15f))
-
-            // Controls — per device type
             when (device.deviceType()) {
                 DeviceType.OUTLET -> OutletControls(device = device, onToggle = onToggle)
                 DeviceType.IRON -> IronControls(device = device, onToggle = onToggle)
@@ -86,21 +80,16 @@ fun DeviceDetailSheet(
                 DeviceType.CAMERA -> CameraControls(device = device)
             }
 
-            HorizontalDivider(color = OnSurfaceVariant.copy(alpha = 0.15f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
 
-            // Delete button
-            OutlinedButton(
+            TextButton(
                 onClick = { showDeleteConfirm = true },
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = StatusError),
-                border = androidx.compose.foundation.BorderStroke(
-                    width = 1.dp,
-                    color = StatusError.copy(alpha = 0.5f)
-                ),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.align(Alignment.CenterHorizontally),
+                colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
             ) {
-                Icon(Icons.Filled.Delete, contentDescription = null, modifier = Modifier.size(16.dp))
+                Icon(Icons.Outlined.Delete, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Remove Device", fontWeight = FontWeight.Medium)
+                Text("Delete Device")
             }
         }
     }
@@ -108,31 +97,24 @@ fun DeviceDetailSheet(
     if (showDeleteConfirm) {
         AlertDialog(
             onDismissRequest = { showDeleteConfirm = false },
-            title = { Text("Remove Device?") },
+            title = { Text("Remove device?") },
             text = {
-                Text(
-                    "\"${device.name}\" will be permanently removed.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                Text("Are you sure you want to remove \"${device.name}\"?")
             },
             confirmButton = {
                 TextButton(onClick = {
                     onDelete()
                     showDeleteConfirm = false
                     onDismiss()
-                }) { Text("Remove", color = StatusError) }
+                }) { Text("Remove", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") }
             },
-            containerColor = SurfaceVariantDark
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Header
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun DeviceSheetHeader(device: Device) {
@@ -140,40 +122,29 @@ private fun DeviceSheetHeader(device: Device) {
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth()
     ) {
-        // Icon + status indicator
-        Box(modifier = Modifier.size(56.dp)) {
-            Box(
-                modifier = Modifier
-                    .size(56.dp)
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(TealContainer),
-                contentAlignment = Alignment.Center
-            ) {
-                Icon(
-                    imageVector = deviceTypeIcon(device.deviceType()),
-                    contentDescription = null,
-                    tint = TealPrimary,
-                    modifier = Modifier.size(30.dp)
-                )
-            }
-            Box(
-                modifier = Modifier
-                    .size(14.dp)
-                    .clip(CircleShape)
-                    .background(statusColor(device.status))
-                    .border(2.dp, SurfaceDark, CircleShape)
-                    .align(Alignment.TopEnd)
+        Box(
+            modifier = Modifier
+                .size(52.dp)
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.2f)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = deviceTypeIcon(device.deviceType()),
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(28.dp)
             )
         }
 
         Spacer(modifier = Modifier.width(16.dp))
 
-        Column {
+        Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = device.name,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold,
-                color = OnSurface
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+                color = MaterialTheme.colorScheme.onSurface
             )
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -186,38 +157,29 @@ private fun DeviceSheetHeader(device: Device) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Outlet controls
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun OutletControls(device: Device, onToggle: () -> Unit) {
     val isOn = device.status == DeviceStatus.ON.name
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text(
-            text = if (isOn) "Outlet is ON" else "Outlet is OFF",
-            style = MaterialTheme.typography.titleMedium,
-            color = if (isOn) StatusOn else OnSurfaceVariant
+            text = if (isOn) "Current Active" else "Currently Inactive",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         BigToggleButton(isOn = isOn, onToggle = onToggle)
         GridPositionInfo(device = device)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Iron controls
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun IronControls(device: Device, onToggle: () -> Unit) {
     val isOn = device.status == DeviceStatus.ON.name
-
-    // Live countdown — ticks every second using LaunchedEffect
     var elapsedSeconds by remember { mutableLongStateOf(0L) }
+
     LaunchedEffect(device.lastTurnedOnAt, isOn) {
         if (isOn && device.lastTurnedOnAt != null) {
             while (true) {
@@ -234,232 +196,127 @@ private fun IronControls(device: Device, onToggle: () -> Unit) {
     val remSec = (maxSec - elapsedSeconds).coerceAtLeast(0L)
     val remMin = remSec / 60
     val remSecPart = remSec % 60
-    val dangerZone = isOn && remMin <= 5
     val pct = if (maxSec > 0) (elapsedSeconds.toFloat() / maxSec.toFloat()).coerceIn(0f, 1f) else 0f
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
         if (isOn) {
             Card(
-                colors = CardDefaults.cardColors(
-                    containerColor = if (dangerZone) StatusError.copy(alpha = 0.15f) else AmberContainer
-                ),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
                 shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
             ) {
-                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = if (dangerZone) Icons.Filled.Warning else Icons.Filled.Timer,
-                            contentDescription = null,
-                            tint = if (dangerZone) StatusError else AmberAccent,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Column {
-                            Text(
-                                text = if (dangerZone) "⚠ Auto-shutoff imminent!" else "Iron Safety Timer",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = if (dangerZone) StatusError else AmberAccent
-                            )
-                            Text(
-                                text = "Max duration: ${device.maxOnDurationMinutes} min",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = OnSurfaceVariant
-                            )
-                        }
-                    }
-                    // Live countdown display
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .background(
-                                color = if (dangerZone) StatusError.copy(alpha = 0.1f) else AmberAccent.copy(alpha = 0.08f),
-                                shape = RoundedCornerShape(8.dp)
-                            )
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = if (remSec <= 0L) "CUTOFF PENDING" else "${remMin}m ${String.format("%02d", remSecPart)}s remaining",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = if (dangerZone) StatusError else AmberAccent
-                        )
-                    }
-                    // Progress bar
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(6.dp)
-                            .clip(RoundedCornerShape(3.dp))
-                            .background(OnSurfaceVariant.copy(alpha = 0.1f))
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxWidth(pct)
-                                .height(6.dp)
-                                .clip(RoundedCornerShape(3.dp))
-                                .background(if (dangerZone) StatusError else AmberAccent)
-                        )
-                    }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("0", style = MaterialTheme.typography.labelSmall, color = OnSurfaceVariant)
-                        Text("${device.maxOnDurationMinutes} min", style = MaterialTheme.typography.labelSmall, color = OnSurfaceVariant)
-                    }
+                Column(modifier = Modifier.padding(20.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(
+                        "Safety Timer",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "${remMin}m ${String.format("%02d", remSecPart)}s left",
+                        style = MaterialTheme.typography.displaySmall,
+                        fontWeight = FontWeight.Bold,
+                        color = if (remMin < 5) SoftRed else MaterialTheme.colorScheme.onSurface
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    LinearProgressIndicator(
+                        progress = { 1f - pct },
+                        modifier = Modifier.fillMaxWidth().height(6.dp).clip(CircleShape),
+                        color = if (remMin < 5) SoftRed else SoftGreen,
+                        trackColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f)
+                    )
                 }
             }
         }
-        Text(
-            text = if (isOn) "Light is ON" else "Light is OFF",
-            style = MaterialTheme.typography.titleMedium,
-            color = if (isOn) StatusOn else OnSurfaceVariant
-        )
         BigToggleButton(isOn = isOn, onToggle = onToggle)
         GridPositionInfo(device = device)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Light controls
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun LightControls(device: Device, onToggle: () -> Unit, onUpdateDevice: (Device) -> Unit = {}) {
     val isOn = device.status == DeviceStatus.ON.name
-
-    // Editable schedule state
-    var editOnTime by remember(device.turnOnTime) { mutableStateOf(device.turnOnTime) }
-    var editOffTime by remember(device.turnOffTime) { mutableStateOf(device.turnOffTime) }
     var showEditSchedule by remember { mutableStateOf(false) }
-    var isSaving by remember { mutableStateOf(false) }
+    val timeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
 
     Column(
         modifier = Modifier.fillMaxWidth(),
         horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(20.dp)
     ) {
-        // Schedule info card
         Card(
-            colors = CardDefaults.cardColors(containerColor = TealContainer),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
             shape = RoundedCornerShape(12.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+            Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceEvenly
                 ) {
-                    ScheduleItem(label = "Turns ON", time = device.turnOnTime.ifBlank { "--:--" })
-                    VerticalDivider(
-                        modifier = Modifier.height(36.dp),
-                        color = OnSurfaceVariant.copy(alpha = 0.3f)
-                    )
-                    ScheduleItem(label = "Turns OFF", time = device.turnOffTime.ifBlank { "--:--" })
+                    ScheduleItem(label = "On at", time = device.turnOnTime.ifBlank { "--:--" })
+                    ScheduleItem(label = "Off at", time = device.turnOffTime.ifBlank { "--:--" })
                 }
-                if (device.turnOnTime.isBlank() && device.turnOffTime.isBlank()) {
-                    Text(
-                        text = "No auto-schedule configured",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OnSurfaceVariant,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                } else {
-                    Text(
-                        text = "☁ Cloud function auto-toggles this light every minute",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = OnSurfaceVariant,
-                        modifier = Modifier.align(Alignment.CenterHorizontally)
-                    )
-                }
-                // Edit schedule button
                 OutlinedButton(
                     onClick = { showEditSchedule = true },
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TealPrimary),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, TealPrimary.copy(alpha = 0.5f)),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(8.dp)
                 ) {
-                    Icon(Icons.Filled.Schedule, contentDescription = null, modifier = Modifier.size(16.dp))
+                    Icon(Icons.Outlined.EditCalendar, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Edit Schedule", fontWeight = FontWeight.Medium)
+                    Text("Modify Schedule")
                 }
             }
         }
-        Text(
-            text = if (isOn) "Light is ON" else "Light is OFF",
-            style = MaterialTheme.typography.titleMedium,
-            color = if (isOn) StatusOn else OnSurfaceVariant
-        )
+        
         BigToggleButton(isOn = isOn, onToggle = onToggle)
         GridPositionInfo(device = device)
     }
 
-    // Edit Schedule Dialog
     if (showEditSchedule) {
+        var editOnTime by remember { mutableStateOf(device.turnOnTime) }
+        var editOffTime by remember { mutableStateOf(device.turnOffTime) }
+        val isTimeValid = timeRegex.matches(editOnTime.trim()) && timeRegex.matches(editOffTime.trim())
+
         AlertDialog(
             onDismissRequest = { showEditSchedule = false },
-            title = {
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Icon(Icons.Filled.Schedule, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(20.dp))
-                    Text("Edit Light Schedule")
-                }
-            },
+            title = { Text("Scheduling") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(
-                        "Set the daily time window. The cloud function toggles this light automatically.",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = OnSurfaceVariant
-                    )
                     OutlinedTextField(
                         value = editOnTime,
                         onValueChange = { editOnTime = it },
-                        label = { Text("Turn ON time (HH:mm)") },
-                        placeholder = { Text("e.g. 18:00") },
+                        label = { Text("Start Time (HH:mm)") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TealPrimary,
-                            focusedLabelColor = TealPrimary
-                        )
+                        modifier = Modifier.fillMaxWidth()
                     )
                     OutlinedTextField(
                         value = editOffTime,
                         onValueChange = { editOffTime = it },
-                        label = { Text("Turn OFF time (HH:mm)") },
-                        placeholder = { Text("e.g. 06:00") },
+                        label = { Text("End Time (HH:mm)") },
                         singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = TealPrimary,
-                            focusedLabelColor = TealPrimary
-                        )
+                        modifier = Modifier.fillMaxWidth()
                     )
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         onUpdateDevice(device.copy(turnOnTime = editOnTime.trim(), turnOffTime = editOffTime.trim()))
                         showEditSchedule = false
                     },
-                    enabled = !isSaving
-                ) { Text("Save", color = TealPrimary, fontWeight = FontWeight.Bold) }
+                    enabled = isTimeValid,
+                    shape = RoundedCornerShape(8.dp)
+                ) { Text("Apply") }
             },
             dismissButton = {
                 TextButton(onClick = { showEditSchedule = false }) { Text("Cancel") }
             },
-            containerColor = SurfaceVariantDark
+            containerColor = MaterialTheme.colorScheme.surface
         )
     }
 }
@@ -467,294 +324,163 @@ private fun LightControls(device: Device, onToggle: () -> Unit, onUpdateDevice: 
 @Composable
 private fun ScheduleItem(label: String, time: String) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(label, style = MaterialTheme.typography.labelSmall, color = OnSurfaceVariant)
-        Text(time, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = TealPrimary)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(time, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold, color = MaterialTheme.colorScheme.onSurface)
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Multi-switch controls
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun MultiSwitchControls(device: Device, onSwitchToggle: (Int) -> Unit) {
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(10.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            "Individual Switches",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = OnSurface
+            "Individual Gangs",
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-        if (device.switches.isEmpty()) {
-            Text("No switch states found.", color = OnSurfaceVariant)
-        } else {
-            device.switches.forEach { sw ->
-                val isOn = sw.status == DeviceStatus.ON.name
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = CardDark),
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(10.dp)
-                                .clip(CircleShape)
-                                .background(if (isOn) StatusOn else StatusOff)
-                        )
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = sw.label.ifBlank { "Switch ${sw.switchIndex + 1}" },
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = OnSurface,
-                            modifier = Modifier.weight(1f)
-                        )
-                        Switch(
-                            checked = isOn,
-                            onCheckedChange = { onSwitchToggle(sw.switchIndex) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = BackgroundDark,
-                                checkedTrackColor = StatusOn,
-                                uncheckedThumbColor = OnSurfaceVariant,
-                                uncheckedTrackColor = SurfaceVariantDark
-                            )
-                        )
-                    }
-                }
+        device.switches.forEach { sw ->
+            val isOn = sw.status == DeviceStatus.ON.name
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = sw.label.ifBlank { "Switch ${sw.switchIndex + 1}" },
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Switch(
+                    checked = isOn,
+                    onCheckedChange = { onSwitchToggle(sw.switchIndex) }
+                )
             }
         }
         GridPositionInfo(device = device)
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Camera controls
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun CameraControls(device: Device) {
     val context = LocalContext.current
-
     Column(
         modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        // Snapshot section
-        Text(
-            "Live Snapshot",
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-            color = OnSurface
-        )
         if (device.cameraSnapshotUrl.isNotBlank()) {
             AsyncImage(
                 model = device.cameraSnapshotUrl,
-                contentDescription = "Camera snapshot",
+                contentDescription = null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(200.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CardDark),
+                    .clip(RoundedCornerShape(12.dp)),
                 contentScale = ContentScale.Crop
             )
-        } else {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(160.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(CardDark),
-                contentAlignment = Alignment.Center
-            ) {
-                Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                    Icon(
-                        Icons.Filled.Videocam,
-                        contentDescription = null,
-                        tint = OnSurfaceVariant,
-                        modifier = Modifier.size(40.dp)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("No snapshot URL configured", color = OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                    Text(
-                        "Add a cameraSnapshotUrl in Firestore to display a feed",
-                        color = OnSurfaceVariant.copy(alpha = 0.6f),
-                        style = MaterialTheme.typography.labelSmall,
-                        modifier = Modifier.padding(horizontal = 16.dp),
-                        textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                    )
-                }
-            }
         }
-
-        // Stream URL card + open button
-        if (device.cameraStreamUrl.isNotBlank()) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = TealContainer),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Icon(Icons.Filled.Videocam, contentDescription = null, tint = TealPrimary, modifier = Modifier.size(18.dp))
-                        Text(
-                            text = "Stream URL",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TealPrimary
-                        )
-                    }
-                    Text(
-                        text = device.cameraStreamUrl,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TealPrimaryLight,
-                        maxLines = 2,
-                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
-                    )
-                    Button(
-                        onClick = {
-                            try {
-                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse(device.cameraStreamUrl))
-                                context.startActivity(intent)
-                            } catch (e: Exception) {
-                                // URL not openable
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = TealPrimary, contentColor = BackgroundDark),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Filled.OpenInBrowser, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Open Stream", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        } else {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = CardDark),
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier.padding(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Icon(Icons.Filled.SignalWifiOff, contentDescription = null, tint = OnSurfaceVariant, modifier = Modifier.size(16.dp))
-                    Text("No stream URL configured", color = OnSurfaceVariant, style = MaterialTheme.typography.bodySmall)
-                }
-            }
+        
+        OutlinedButton(
+            onClick = {
+                try {
+                    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(device.cameraStreamUrl))
+                    context.startActivity(intent)
+                } catch (e: Exception) {}
+            },
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(8.dp),
+            enabled = device.cameraStreamUrl.isNotBlank()
+        ) {
+            Icon(Icons.AutoMirrored.Outlined.Launch, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Launch Stream")
         }
         GridPositionInfo(device = device)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Shared sub-composables
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun BigToggleButton(isOn: Boolean, onToggle: () -> Unit) {
+    val color = if (isOn) SoftGreen else MaterialTheme.colorScheme.primary
     Button(
         onClick = onToggle,
-        colors = ButtonDefaults.buttonColors(
-            containerColor = if (isOn) StatusOn.copy(alpha = 0.2f) else SurfaceVariantDark
-        ),
-        border = androidx.compose.foundation.BorderStroke(
-            width = 1.dp,
-            color = if (isOn) StatusOn else OnSurfaceVariant.copy(alpha = 0.3f)
-        ),
-        shape = RoundedCornerShape(50.dp),
-        contentPadding = PaddingValues(horizontal = 40.dp, vertical = 16.dp)
+        colors = ButtonDefaults.buttonColors(containerColor = color),
+        modifier = Modifier.fillMaxWidth().height(56.dp),
+        shape = RoundedCornerShape(16.dp)
     ) {
         Icon(
-            imageVector = if (isOn) Icons.Filled.PowerOff else Icons.Filled.Power,
+            imageVector = if (isOn) Icons.Outlined.PowerSettingsNew else Icons.Outlined.PowerSettingsNew,
             contentDescription = null,
-            tint = if (isOn) StatusOn else OnSurfaceVariant,
-            modifier = Modifier.size(22.dp)
+            modifier = Modifier.size(24.dp)
         )
-        Spacer(modifier = Modifier.width(10.dp))
+        Spacer(modifier = Modifier.width(12.dp))
         Text(
-            text = if (isOn) "Turn OFF" else "Turn ON",
-            fontWeight = FontWeight.Bold,
-            color = if (isOn) StatusOn else OnSurface,
-            style = MaterialTheme.typography.titleSmall
+            text = if (isOn) "Switch Off" else "Switch On",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold
         )
     }
 }
 
 @Composable
 private fun StatusChip(status: String) {
-    val (bg, fg) = when (status) {
-        DeviceStatus.ON.name -> StatusOn.copy(alpha = 0.2f) to StatusOn
-        DeviceStatus.ERROR.name -> StatusError.copy(alpha = 0.2f) to StatusError
-        DeviceStatus.DISCONNECTED.name -> StatusDisconnected.copy(alpha = 0.2f) to StatusDisconnected
-        else -> StatusOff.copy(alpha = 0.2f) to OnSurfaceVariant
+    val color = when (status) {
+        DeviceStatus.ON.name -> SoftGreen
+        DeviceStatus.ERROR.name -> SoftRed
+        else -> MaterialTheme.colorScheme.onSurfaceVariant
     }
     Surface(
-        shape = CircleShape,
-        color = bg
+        shape = RoundedCornerShape(4.dp),
+        color = color.copy(alpha = 0.1f)
     ) {
         Text(
             text = status,
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
-            color = fg,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+            color = color,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
         )
     }
 }
 
 @Composable
 private fun TypeBadge(type: DeviceType) {
-    Surface(
-        shape = CircleShape,
-        color = TealContainer
-    ) {
-        Text(
-            text = type.name.replace("_", " "),
-            style = MaterialTheme.typography.labelSmall,
-            color = TealPrimaryLight,
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
-        )
+    val displayType = type.name.lowercase().replaceFirstChar { 
+        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() 
     }
+    Text(
+        text = displayType,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
 }
 
 @Composable
 private fun GridPositionInfo(device: Device) {
     Text(
-        text = "Grid position: (${device.gridX}, ${device.gridY})",
+        text = "Location: Sector ${device.gridX}-${device.gridY}",
         style = MaterialTheme.typography.labelSmall,
-        color = OnSurfaceVariant
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.fillMaxWidth(),
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center
     )
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────────
-
 fun deviceTypeIcon(type: DeviceType) = when (type) {
-    DeviceType.OUTLET -> Icons.Filled.Power
-    DeviceType.MULTI_SWITCH -> Icons.Filled.ToggleOn
-    DeviceType.IRON -> Icons.Filled.LocalLaundryService
-    DeviceType.LIGHT -> Icons.Filled.Lightbulb
-    DeviceType.CAMERA -> Icons.Filled.Videocam
+    DeviceType.OUTLET -> Icons.Outlined.Power
+    DeviceType.MULTI_SWITCH -> Icons.Outlined.Tune
+    DeviceType.IRON -> Icons.Outlined.Timer
+    DeviceType.LIGHT -> Icons.Outlined.Lightbulb
+    DeviceType.CAMERA -> Icons.Outlined.Videocam
 }
 
 fun statusColor(status: String): Color = when (status) {
-    DeviceStatus.ON.name -> StatusOn
-    DeviceStatus.ERROR.name -> StatusError
-    DeviceStatus.DISCONNECTED.name -> StatusDisconnected
-    else -> StatusOff
+    DeviceStatus.ON.name -> SoftGreen
+    DeviceStatus.ERROR.name -> SoftRed
+    else -> SoftGrey
 }

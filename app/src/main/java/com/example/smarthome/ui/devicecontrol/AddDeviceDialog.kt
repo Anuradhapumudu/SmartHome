@@ -10,11 +10,13 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -24,9 +26,6 @@ import com.example.smarthome.data.model.DeviceType
 import com.example.smarthome.data.model.SwitchState
 import com.example.smarthome.ui.theme.*
 
-/**
- * Add Device dialog with dynamic fields based on selected device type.
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddDeviceDialog(
@@ -40,7 +39,6 @@ fun AddDeviceDialog(
     var gridX by remember { mutableIntStateOf(initialPosition?.first ?: 0) }
     var gridY by remember { mutableIntStateOf(initialPosition?.second ?: 0) }
 
-    // Type-specific fields
     var switchCount by remember { mutableIntStateOf(2) }
     var maxOnDuration by remember { mutableStateOf("30") }
     var turnOnTime by remember { mutableStateOf("18:00") }
@@ -48,15 +46,22 @@ fun AddDeviceDialog(
     var snapshotUrl by remember { mutableStateOf("") }
     var streamUrl by remember { mutableStateOf("") }
 
+    val timeRegex = Regex("^([01]\\d|2[0-3]):([0-5]\\d)$")
+    val isTimeValid = if (selectedType == DeviceType.LIGHT) {
+        timeRegex.matches(turnOnTime.trim()) && timeRegex.matches(turnOffTime.trim())
+    } else true
+
+    val isNameValid = name.isNotBlank()
+    val canConfirm = isNameValid && isTimeValid
     val positionOccupied = Pair(gridX, gridY) in occupiedPositions
 
     AlertDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                "Add Device",
-                fontWeight = FontWeight.Bold,
-                color = TealPrimary
+                "Integrate Device",
+                style = MaterialTheme.typography.headlineSmall,
+                color = MaterialTheme.colorScheme.onSurface
             )
         },
         text = {
@@ -64,87 +69,90 @@ fun AddDeviceDialog(
                 modifier = Modifier
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // ── Device Name ──────────────────────────────────────────────
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Device name") },
+                    label = { Text("Display Name") },
+                    placeholder = { Text("e.g. Living Room Lamp") },
                     singleLine = true,
                     colors = dialogTextFieldColors(),
                     modifier = Modifier.fillMaxWidth()
                 )
 
-                // ── Device Type Selector ─────────────────────────────────────
-                Text(
-                    "Device Type",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = OnSurfaceVariant
-                )
-                DeviceTypeSelector(
-                    selected = selectedType,
-                    onSelect = { selectedType = it }
-                )
-
-                // ── Grid Position ────────────────────────────────────────────
-                Text(
-                    "Grid Position (0–7)",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = OnSurfaceVariant
-                )
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = gridX.toString(),
-                        onValueChange = { gridX = it.toIntOrNull()?.coerceIn(0, 7) ?: gridX },
-                        label = { Text("Column (X)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = dialogTextFieldColors(),
-                        isError = positionOccupied,
-                        modifier = Modifier.weight(1f)
-                    )
-                    OutlinedTextField(
-                        value = gridY.toString(),
-                        onValueChange = { gridY = it.toIntOrNull()?.coerceIn(0, 7) ?: gridY },
-                        label = { Text("Row (Y)") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        colors = dialogTextFieldColors(),
-                        isError = positionOccupied,
-                        modifier = Modifier.weight(1f)
-                    )
-                }
-                if (positionOccupied) {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(
-                        "Position ($gridX, $gridY) is already occupied",
-                        style = MaterialTheme.typography.labelSmall,
-                        color = StatusError
+                        "Category",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    DeviceTypeSelector(
+                        selected = selectedType,
+                        onSelect = { selectedType = it }
                     )
                 }
 
-                // ── Type-Specific Fields ─────────────────────────────────────
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Placement (0–7)",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = gridX.toString(),
+                            onValueChange = { gridX = it.toIntOrNull()?.coerceIn(0, 7) ?: gridX },
+                            label = { Text("Col") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = dialogTextFieldColors(),
+                            isError = positionOccupied,
+                            modifier = Modifier.weight(1f)
+                        )
+                        OutlinedTextField(
+                            value = gridY.toString(),
+                            onValueChange = { gridY = it.toIntOrNull()?.coerceIn(0, 7) ?: gridY },
+                            label = { Text("Row") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            colors = dialogTextFieldColors(),
+                            isError = positionOccupied,
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                    if (positionOccupied) {
+                        Text(
+                            "This coordinate is already in use",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                }
+
                 when (selectedType) {
                     DeviceType.MULTI_SWITCH -> {
-                        Text(
-                            "Number of Switches",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = OnSurfaceVariant
-                        )
-                        SwitchCountSelector(
-                            selected = switchCount,
-                            onSelect = { switchCount = it }
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Text(
+                                "Configuration",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            SwitchCountSelector(
+                                selected = switchCount,
+                                onSelect = { switchCount = it }
+                            )
+                        }
                     }
 
                     DeviceType.IRON -> {
                         OutlinedTextField(
                             value = maxOnDuration,
                             onValueChange = { maxOnDuration = it },
-                            label = { Text("Max ON duration (minutes)") },
+                            label = { Text("Auto-cutoff limit (min)") },
                             singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             colors = dialogTextFieldColors(),
@@ -157,7 +165,7 @@ fun AddDeviceDialog(
                             OutlinedTextField(
                                 value = turnOnTime,
                                 onValueChange = { turnOnTime = it },
-                                label = { Text("Turn ON (HH:mm)") },
+                                label = { Text("Daily Start") },
                                 singleLine = true,
                                 colors = dialogTextFieldColors(),
                                 modifier = Modifier.weight(1f)
@@ -165,7 +173,7 @@ fun AddDeviceDialog(
                             OutlinedTextField(
                                 value = turnOffTime,
                                 onValueChange = { turnOffTime = it },
-                                label = { Text("Turn OFF (HH:mm)") },
+                                label = { Text("Daily End") },
                                 singleLine = true,
                                 colors = dialogTextFieldColors(),
                                 modifier = Modifier.weight(1f)
@@ -177,7 +185,7 @@ fun AddDeviceDialog(
                         OutlinedTextField(
                             value = snapshotUrl,
                             onValueChange = { snapshotUrl = it },
-                            label = { Text("Snapshot URL (optional)") },
+                            label = { Text("Static Snapshot URL") },
                             singleLine = true,
                             colors = dialogTextFieldColors(),
                             modifier = Modifier.fillMaxWidth()
@@ -185,14 +193,13 @@ fun AddDeviceDialog(
                         OutlinedTextField(
                             value = streamUrl,
                             onValueChange = { streamUrl = it },
-                            label = { Text("Stream URL (optional)") },
+                            label = { Text("Live Feed URL") },
                             singleLine = true,
                             colors = dialogTextFieldColors(),
                             modifier = Modifier.fillMaxWidth()
                         )
                     }
-
-                    else -> { /* OUTLET — no extra fields */ }
+                    else -> {}
                 }
             }
         },
@@ -206,29 +213,25 @@ fun AddDeviceDialog(
                         gridY = gridY,
                         switchCount = switchCount,
                         maxOnDuration = maxOnDuration.toIntOrNull() ?: 30,
-                        turnOnTime = turnOnTime,
-                        turnOffTime = turnOffTime,
+                        turnOnTime = turnOnTime.trim(),
+                        turnOffTime = turnOffTime.trim(),
                         snapshotUrl = snapshotUrl.trim(),
                         streamUrl = streamUrl.trim()
                     )
                     onConfirm(device)
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = TealPrimary),
-                enabled = name.isNotBlank() && !positionOccupied
+                enabled = canConfirm && !positionOccupied,
+                shape = RoundedCornerShape(8.dp)
             ) {
-                Text("Add", color = BackgroundDark, fontWeight = FontWeight.SemiBold)
+                Text("Add Device")
             }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancel") }
         },
-        containerColor = SurfaceVariantDark
+        containerColor = MaterialTheme.colorScheme.surface
     )
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Sub-composables
-// ─────────────────────────────────────────────────────────────────────────────
 
 @Composable
 private fun DeviceTypeSelector(
@@ -236,41 +239,37 @@ private fun DeviceTypeSelector(
     onSelect: (DeviceType) -> Unit
 ) {
     val types = listOf(
-        DeviceType.OUTLET to "Outlet",
-        DeviceType.MULTI_SWITCH to "Multi-Switch",
-        DeviceType.IRON to "Iron",
-        DeviceType.LIGHT to "Light",
-        DeviceType.CAMERA to "Camera"
+        DeviceType.OUTLET to "Power",
+        DeviceType.MULTI_SWITCH to "Gang",
+        DeviceType.IRON to "Safety",
+        DeviceType.LIGHT to "Bulb",
+        DeviceType.CAMERA to "Vision"
     )
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        types.chunked(3).forEach { row ->
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                row.forEach { (type, label) ->
-                    val isSelected = selected == type
-                    FilterChip(
-                        selected = isSelected,
-                        onClick = { onSelect(type) },
-                        label = {
-                            Text(
-                                label,
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                            )
-                        },
-                        colors = FilterChipDefaults.filterChipColors(
-                            selectedContainerColor = TealPrimary.copy(alpha = 0.25f),
-                            selectedLabelColor = TealPrimary,
-                            containerColor = SurfaceDark
-                        ),
-                        border = FilterChipDefaults.filterChipBorder(
-                            enabled = true,
-                            selected = isSelected,
-                            selectedBorderColor = TealPrimary,
-                            borderColor = OnSurfaceVariant.copy(alpha = 0.3f)
-                        )
-                    )
-                }
-            }
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        types.forEach { (type, label) ->
+            val isSelected = selected == type
+            FilterChip(
+                selected = isSelected,
+                onClick = { onSelect(type) },
+                label = {
+                    Text(label, style = MaterialTheme.typography.labelSmall)
+                },
+                colors = FilterChipDefaults.filterChipColors(
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                ),
+                border = FilterChipDefaults.filterChipBorder(
+                    enabled = true,
+                    selected = isSelected,
+                    selectedBorderColor = MaterialTheme.colorScheme.primary,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                shape = RoundedCornerShape(8.dp)
+            )
         }
     }
 }
@@ -287,23 +286,20 @@ private fun SwitchCountSelector(
                 selected = isSelected,
                 onClick = { onSelect(count) },
                 label = {
-                    Text(
-                        "$count switches",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal
-                    )
+                    Text("$count-Way", style = MaterialTheme.typography.labelSmall)
                 },
                 colors = FilterChipDefaults.filterChipColors(
-                    selectedContainerColor = TealPrimary.copy(alpha = 0.25f),
-                    selectedLabelColor = TealPrimary,
-                    containerColor = SurfaceDark
+                    selectedContainerColor = MaterialTheme.colorScheme.primary,
+                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                 ),
                 border = FilterChipDefaults.filterChipBorder(
                     enabled = true,
                     selected = isSelected,
-                    selectedBorderColor = TealPrimary,
-                    borderColor = OnSurfaceVariant.copy(alpha = 0.3f)
-                )
+                    selectedBorderColor = MaterialTheme.colorScheme.primary,
+                    borderColor = MaterialTheme.colorScheme.outlineVariant
+                ),
+                shape = RoundedCornerShape(8.dp)
             )
         }
     }
@@ -311,16 +307,9 @@ private fun SwitchCountSelector(
 
 @Composable
 private fun dialogTextFieldColors() = OutlinedTextFieldDefaults.colors(
-    focusedBorderColor = TealPrimary,
-    focusedLabelColor = TealPrimary,
-    cursorColor = TealPrimary,
-    unfocusedContainerColor = SurfaceDark,
-    focusedContainerColor = SurfaceDark
+    focusedBorderColor = MaterialTheme.colorScheme.primary,
+    unfocusedContainerColor = Color.Transparent
 )
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Builder helper
-// ─────────────────────────────────────────────────────────────────────────────
 
 private fun buildDevice(
     name: String,
@@ -338,7 +327,7 @@ private fun buildDevice(
         (0 until switchCount).map { i ->
             SwitchState(
                 switchIndex = i,
-                label = "Switch ${i + 1}",
+                label = "Channel ${i + 1}",
                 status = DeviceStatus.OFF.name
             )
         }

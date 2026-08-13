@@ -29,7 +29,15 @@
       serverTimestamp,
       addDoc,
       getDocs,
+      where,
     } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+    import {
+      getAuth,
+      signInWithEmailAndPassword,
+      createUserWithEmailAndPassword,
+      signOut,
+      onAuthStateChanged,
+    } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
     // ── Firebase config ─────────────────────────────────────────────────────
     const firebaseConfig = {
@@ -43,13 +51,16 @@
 
     const app = initializeApp(firebaseConfig);
     const db = getFirestore(app);
+    const auth = getAuth(app);
 
     // ── App state ────────────────────────────────────────────────────────────
+    let currentUser = null;
     let floorPlans = [];
     let activePlanId = null;
     let activePlanName = "";
     let devices = [];
     let allLogs = [];
+    let floorPlanUnsub = null;
     let deviceUnsub = null;
     let alertUnsub = null;
     let ironTimers = {}; // deviceId -> setInterval id
@@ -61,6 +72,91 @@
     let statTotal, statOn, statOff, statCutoffs;
     let detailPanel;
     let activeLogFilter = "ALL";
+
+    let authOverlay, loginForm, signupForm, authError;
+    let topbarUser, userEmailDisplay;
+
+    // ── Auth Handling ────────────────────────────────────────────────────────
+    function initAuth() {
+      onAuthStateChanged(auth, (user) => {
+        if (user) {
+          currentUser = user;
+          authOverlay.classList.add("hidden");
+          topbarUser.style.display = "flex";
+          userEmailDisplay.textContent = user.email;
+          subscribeToFloorPlans();
+          subscribeToLogs();
+        } else {
+          currentUser = null;
+          authOverlay.classList.remove("hidden");
+          topbarUser.style.display = "none";
+          resetAppState();
+        }
+      });
+
+      document.getElementById("login-btn").addEventListener("click", handleLogin);
+      document.getElementById("signup-btn").addEventListener("click", handleSignup);
+      document.getElementById("logout-btn").addEventListener("click", () => signOut(auth));
+
+      document.getElementById("show-signup").addEventListener("click", (e) => {
+        e.preventDefault();
+        loginForm.style.display = "none";
+        signupForm.style.display = "block";
+        authError.style.display = "none";
+      });
+      document.getElementById("show-login").addEventListener("click", (e) => {
+        e.preventDefault();
+        signupForm.style.display = "none";
+        loginForm.style.display = "block";
+        authError.style.display = "none";
+      });
+    }
+
+    async function handleLogin() {
+      const email = document.getElementById("login-email").value;
+      const pass = document.getElementById("login-password").value;
+      try {
+        authError.style.display = "none";
+        await signInWithEmailAndPassword(auth, email, pass);
+      } catch (err) {
+        authError.textContent = "Login failed: " + err.message;
+        authError.style.display = "block";
+      }
+    }
+
+    async function handleSignup() {
+      const email = document.getElementById("signup-email").value;
+      const pass = document.getElementById("signup-password").value;
+      const confirm = document.getElementById("signup-confirm").value;
+
+      if (pass !== confirm) {
+        authError.textContent = "Passwords do not match";
+        authError.style.display = "block";
+        return;
+      }
+
+      try {
+        authError.style.display = "none";
+        await createUserWithEmailAndPassword(auth, email, pass);
+      } catch (err) {
+        authError.textContent = "Signup failed: " + err.message;
+        authError.style.display = "block";
+      }
+    }
+
+    function resetAppState() {
+      if (floorPlanUnsub) floorPlanUnsub();
+      if (deviceUnsub) deviceUnsub();
+      if (alertUnsub) alertUnsub();
+      floorPlans = [];
+      devices = [];
+      allLogs = [];
+      activePlanId = null;
+      renderSidebar();
+      renderGrid();
+      renderLogs();
+      updateStats();
+    }
 
     // ── Utility ──────────────────────────────────────────────────────────────
     function fmtTime(ts) {
@@ -123,11 +219,11 @@
     // Convert a Firestore REST API typed value to a plain JS value
     function fromFirestoreValue(val) {
       if (!val) return null;
-      if ("stringValue"    in val) return val.stringValue;
-      if ("integerValue"   in val) return parseInt(val.integerValue, 10);
-      if ("doubleValue"    in val) return val.doubleValue;
-      if ("booleanValue"   in val) return val.booleanValue;
-      if ("nullValue"      in val) return null;
+      if ("stringValue" in val) return val.stringValue;
+      if ("integerValue" in val) return parseInt(val.integerValue, 10);
+      if ("doubleValue" in val) return val.doubleValue;
+      if ("booleanValue" in val) return val.booleanValue;
+      if ("nullValue" in val) return null;
       if ("timestampValue" in val) {
         const ms = new Date(val.timestampValue).getTime();
         return { seconds: Math.floor(ms / 1000), toDate: () => new Date(val.timestampValue) };
@@ -174,7 +270,7 @@
       const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/floorPlans/${planId}/devices/${deviceId}?updateMask.fieldPaths=${fieldMask}&key=${apiKey}`;
       const body = { fields: {} };
       for (const [k, v] of Object.entries(fields)) {
-        if (typeof v === "string")  body.fields[k] = { stringValue: v };
+        if (typeof v === "string") body.fields[k] = { stringValue: v };
         else if (typeof v === "number") body.fields[k] = { integerValue: String(v) };
         else if (typeof v === "boolean") body.fields[k] = { booleanValue: v };
       }
@@ -192,11 +288,13 @@
       const url = `https://firestore.googleapis.com/v1/projects/${projectId}/databases/(default)/documents/usageLogs?key=${apiKey}`;
       const body = { fields: {} };
       for (const [k, v] of Object.entries(logData)) {
-        if (typeof v === "string")  body.fields[k] = { stringValue: v };
+        if (typeof v === "string") body.fields[k] = { stringValue: v };
         else if (typeof v === "number") body.fields[k] = { integerValue: String(v) };
         else if (v instanceof Date) body.fields[k] = { timestampValue: v.toISOString() };
-        else if (k === "timestamp") body.fields[k] = { timestampValue: new Date().toISOString() };
       }
+      // Set timestamp as real Firestore timestamp
+      body.fields["timestamp"] = { timestampValue: new Date().toISOString() };
+
       const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -223,22 +321,15 @@
 
     async function fetchDevicesOnce(planId, forceLoad = false) {
       if (!forceLoad && Date.now() - lastToggleTime < 2000) return;
+      if (!currentUser) return;
       try {
-        // Primary: REST API (always works, no SDK auth issues)
-        const fetched = await fetchDevicesViaRest(planId);
+        // Use SDK with query for isolation
+        const snap = await getDocs(collection(db, "floorPlans", planId, "devices"));
+        const fetched = snap.docs.map(d => ({ ...d.data(), id: d.id }));
         applyDevices(fetched);
-      } catch (restErr) {
-        console.warn("REST fetch failed, trying SDK getDocs:", restErr);
-        if (headerSub) headerSub.textContent = "⚠ REST err: " + restErr.message;
-        try {
-          // Fallback: SDK getDocs
-          const snap = await getDocs(collection(db, "floorPlans", planId, "devices"));
-          const fetched = snap.docs.map(d => ({ ...d.data(), id: d.id }));
-          applyDevices(fetched);
-        } catch (sdkErr) {
-          console.error("SDK getDocs also failed:", sdkErr);
-          if (headerSub) headerSub.textContent = "⚠ Both REST and SDK failed — check console";
-        }
+      } catch (sdkErr) {
+        console.error("SDK fetch failed:", sdkErr);
+        if (headerSub) headerSub.textContent = "⚠ SDK err: " + sdkErr.message;
       }
     }
 
@@ -552,8 +643,8 @@
     window._closePanel = () => closeDetailPanel();
 
     window._toggleDevice = async (deviceId) => {
-      if (!activePlanId || !deviceId) {
-        console.error("Toggle aborted: missing planId or deviceId");
+      if (!activePlanId || !deviceId || !currentUser) {
+        console.error("Toggle aborted: missing planId, deviceId or auth");
         return;
       }
 
@@ -587,33 +678,17 @@
       }
 
       try {
-        // Try REST write first (bypasses SDK issues), then SDK fallback
-        try {
-          const restFields = { status: newStatus };
-          if (device.type === "IRON" && newStatus === "ON") {
-            restFields.lastTurnedOnAt = Date.now() / 1000; // approx timestamp
-          }
-          await patchDeviceViaRest(activePlanId, deviceId, { status: newStatus });
-          await addLogViaRest({
-            deviceId,
-            deviceName: device.name || "",
-            floorPlanId: activePlanId,
-            floorPlanName: activePlanName,
-            event: newStatus,
-            timestamp: "now", // handled in addLogViaRest
-          });
-        } catch (restErr) {
-          console.warn("REST write failed, trying SDK:", restErr);
-          await updateDoc(doc(db, "floorPlans", activePlanId, "devices", deviceId), updates);
-          await addDoc(collection(db, "usageLogs"), {
-            deviceId,
-            deviceName: device.name || "",
-            floorPlanId: activePlanId,
-            floorPlanName: activePlanName,
-            event: newStatus,
-            timestamp: serverTimestamp(),
-          });
-        }
+        // Use SDK now that we have Auth
+        await updateDoc(doc(db, "floorPlans", activePlanId, "devices", deviceId), updates);
+        await addDoc(collection(db, "usageLogs"), {
+          userId: currentUser.uid,
+          deviceId,
+          deviceName: device.name || "",
+          floorPlanId: activePlanId,
+          floorPlanName: activePlanName,
+          event: newStatus,
+          timestamp: serverTimestamp(),
+        });
       } catch (err) {
         console.error("Toggle failed (both REST and SDK):", err);
         showAlert("⚠ Toggle failed: " + err.message, "error");
@@ -647,9 +722,20 @@
 
     // ── Logs panel ────────────────────────────────────────────────────────────
     function subscribeToLogs() {
-      const q = query(collection(db, "usageLogs"), orderBy("timestamp", "desc"), limit(100));
+      if (!currentUser) return;
+      const q = query(
+        collection(db, "usageLogs"),
+        where("userId", "==", currentUser.uid),
+        limit(100)
+      );
       alertUnsub = onSnapshot(q, (snap) => {
         allLogs = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
+        // Sort locally to avoid composite index requirement
+        allLogs.sort((a, b) => {
+          const ta = a.timestamp?.seconds ?? 0;
+          const tb = b.timestamp?.seconds ?? 0;
+          return tb - ta; // Descending
+        });
         renderLogs();
         updateStats();
         // Show alert banner for latest CUTOFF
@@ -718,38 +804,10 @@
       }
     }
 
-    // ── Init ──────────────────────────────────────────────────────────────────
-    document.addEventListener("DOMContentLoaded", () => {
-      sidebarList = document.getElementById("sidebar-list");
-      gridContainer = document.getElementById("grid");
-      headerTitle = document.getElementById("header-title");
-      headerSub = document.getElementById("header-sub");
-      alertBanner = document.getElementById("alert-banner");
-      alertMsg = document.getElementById("alert-msg");
-      logsContainer = document.getElementById("logs-container");
-      statTotal = document.getElementById("stat-total");
-      statOn = document.getElementById("stat-on");
-      statOff = document.getElementById("stat-off");
-      statCutoffs = document.getElementById("stat-cutoffs");
-      detailPanel = document.getElementById("detail-panel");
-
-      document.getElementById("alert-close").addEventListener("click", () => {
-        alertBanner.className = "alert-banner";
-      });
-
-      // Log filter buttons
-      document.querySelectorAll(".log-filter-btn").forEach(btn => {
-        btn.addEventListener("click", () => {
-          activeLogFilter = btn.dataset.filter;
-          document.querySelectorAll(".log-filter-btn").forEach(b => b.classList.remove("active"));
-          btn.classList.add("active");
-          renderLogs();
-        });
-      });
-
-      // Subscribe to floor plans — NO orderBy so docs without createdAt also load
-      onSnapshot(
-        collection(db, "floorPlans"),
+    function subscribeToFloorPlans() {
+      if (floorPlanUnsub) floorPlanUnsub();
+      floorPlanUnsub = onSnapshot(
+        query(collection(db, "floorPlans"), where("userId", "==", currentUser.uid)),
         (snap) => {
           floorPlans = snap.docs.map((d) => ({ ...d.data(), id: d.id }));
           // Sort client-side so docs without createdAt still show up
@@ -776,8 +834,45 @@
           headerSub.textContent = "⚠ Connection error — check console";
         }
       );
+    }
 
-      subscribeToLogs();
+    // ── Init ──────────────────────────────────────────────────────────────────
+    document.addEventListener("DOMContentLoaded", () => {
+      sidebarList = document.getElementById("sidebar-list");
+      gridContainer = document.getElementById("grid");
+      headerTitle = document.getElementById("header-title");
+      headerSub = document.getElementById("header-sub");
+      alertBanner = document.getElementById("alert-banner");
+      alertMsg = document.getElementById("alert-msg");
+      logsContainer = document.getElementById("logs-container");
+      statTotal = document.getElementById("stat-total");
+      statOn = document.getElementById("stat-on");
+      statOff = document.getElementById("stat-off");
+      statCutoffs = document.getElementById("stat-cutoffs");
+      detailPanel = document.getElementById("detail-panel");
+
+      authOverlay = document.getElementById("auth-overlay");
+      loginForm = document.getElementById("login-form");
+      signupForm = document.getElementById("signup-form");
+      authError = document.getElementById("auth-error");
+      topbarUser = document.getElementById("topbar-user");
+      userEmailDisplay = document.getElementById("user-email");
+
+      document.getElementById("alert-close").addEventListener("click", () => {
+        alertBanner.className = "alert-banner";
+      });
+
+      // Log filter buttons
+      document.querySelectorAll(".log-filter-btn").forEach(btn => {
+        btn.addEventListener("click", () => {
+          activeLogFilter = btn.dataset.filter;
+          document.querySelectorAll(".log-filter-btn").forEach(b => b.classList.remove("active"));
+          btn.classList.add("active");
+          renderLogs();
+        });
+      });
+
+      initAuth();
 
       // Iron timer refresh every second
       setInterval(() => {
@@ -2008,6 +2103,146 @@
       background: rgba(0, 188, 212, .2);
       border-radius: 4px;
     }
+
+    /* ── Auth Overlay ────────────────────────────────────────────────────────── */
+    .auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: var(--bg);
+      z-index: 1000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .auth-overlay.hidden {
+      display: none;
+    }
+
+    .auth-card {
+      width: 100%;
+      max-width: 400px;
+      background: var(--surface);
+      border: 1px solid rgba(0, 188, 212, 0.2);
+      border-radius: 20px;
+      padding: 32px;
+      box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+    }
+
+    .auth-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .auth-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+
+    .auth-subtitle {
+      font-size: 0.85rem;
+      color: var(--on-muted);
+      margin-bottom: 24px;
+    }
+
+    .auth-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid rgba(255,255,255,0.1);
+      color: var(--on-surface);
+      padding: 14px 16px;
+      border-radius: 12px;
+      margin-bottom: 12px;
+      font-family: inherit;
+      outline: none;
+    }
+
+    .auth-input:focus {
+      border-color: var(--teal);
+    }
+
+    .auth-btn {
+      width: 100%;
+      background: var(--teal);
+      color: var(--bg);
+      border: none;
+      padding: 14px;
+      border-radius: 12px;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-top: 8px;
+      transition: opacity 0.2s;
+    }
+
+    .auth-btn:hover {
+      opacity: 0.9;
+    }
+
+    .auth-switch {
+      text-align: center;
+      margin-top: 20px;
+      font-size: 0.85rem;
+      color: var(--on-muted);
+    }
+
+    .auth-switch a {
+      color: var(--teal);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .auth-error {
+      background: var(--red-dim);
+      color: var(--red);
+      padding: 12px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      margin-bottom: 20px;
+      border: 1px solid rgba(255, 82, 82, 0.2);
+    }
+
+    .auth-footer {
+      margin-top: 32px;
+      text-align: center;
+      font-size: 0.7rem;
+      color: var(--on-muted);
+      opacity: 0.6;
+    }
+
+    .topbar-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-right: 20px;
+      padding-right: 20px;
+      border-right: 1px solid rgba(255,255,255,0.1);
+    }
+
+    .user-email {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--on-muted);
+    }
+
+    .logout-btn {
+      background: transparent;
+      border: 1px solid rgba(255, 82, 82, 0.4);
+      color: var(--red);
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .logout-btn:hover {
+      background: var(--red-dim);
+    }
   </style>
 </head>
 
@@ -2021,6 +2256,10 @@
       <div class="sub">Hardware Simulator Dashboard</div>
     </div>
     <div class="topbar-right">
+      <div id="topbar-user" class="topbar-user" style="display:none">
+        <span id="user-email" class="user-email"></span>
+        <button id="logout-btn" class="logout-btn">Logout</button>
+      </div>
       <div class="topbar-badge">SCS 3311 Mini-Project</div>
       <div class="live-dot"></div>
       <div class="live-label">Live · Firestore</div>
@@ -2102,7 +2341,6 @@
         <!-- Grid panel -->
         <div class="grid-panel">
           <div class="floor-wrap">
-            <img src="./floor_plan.png" alt="Floor plan overlay" class="floor-bg-img" />
             <div id="grid"></div>
           </div>
         </div>
@@ -2126,6 +2364,44 @@
         </div>
       </div>
     </main>
+  </div>
+
+  <!-- Auth Overlay -->
+  <div id="auth-overlay" class="auth-overlay">
+    <div class="auth-card">
+      <div class="auth-header">
+        <div class="topbar-accent"></div>
+        <div class="topbar-brand">
+          <div class="name">Smart Home</div>
+          <div class="sub">Hardware Simulator Login</div>
+        </div>
+      </div>
+
+      <div id="auth-error" class="auth-error" style="display:none"></div>
+
+      <div id="login-form">
+        <h2 class="auth-title">Welcome Back</h2>
+        <p class="auth-subtitle">Log in to manage your smart home</p>
+        <input type="email" id="login-email" placeholder="Email Address" class="auth-input" />
+        <input type="password" id="login-password" placeholder="Password" class="auth-input" />
+        <button id="login-btn" class="auth-btn">Sign In</button>
+        <p class="auth-switch">Don't have an account? <a href="#" id="show-signup">Sign Up</a></p>
+      </div>
+
+      <div id="signup-form" style="display:none">
+        <h2 class="auth-title">Create Account</h2>
+        <p class="auth-subtitle">Start your smart home journey</p>
+        <input type="email" id="signup-email" placeholder="Email Address" class="auth-input" />
+        <input type="password" id="signup-password" placeholder="Password" class="auth-input" />
+        <input type="password" id="signup-confirm" placeholder="Confirm Password" class="auth-input" />
+        <button id="signup-btn" class="auth-btn">Sign Up</button>
+        <p class="auth-switch">Already have an account? <a href="#" id="show-login">Sign In</a></p>
+      </div>
+
+      <div class="auth-footer">
+        Use the same credentials as the Android app
+      </div>
+    </div>
   </div>
 
 </body>

@@ -8,6 +8,7 @@ import com.google.firebase.Timestamp
  */
 data class FloorPlan(
     val id: String = "",
+    val userId: String = "",         // Owner of this floor plan
     val name: String = "",           // e.g. "Ground Floor", "First Floor"
     val imageUrl: String = "",       // URL or local drawable reference
     val createdAt: Timestamp? = null
@@ -92,10 +93,21 @@ data class Device(
  */
 data class UsageLog(
     val id: String = "",
+    val userId: String = "",
     val deviceId: String = "",
     val deviceName: String = "",
     val floorPlanId: String = "",
     val floorPlanName: String = "",
     val event: String = "",              // "ON" | "OFF" | "CUTOFF" | "SCHEDULE_ON" | "SCHEDULE_OFF"
-    val timestamp: Timestamp? = null
-)
+    val timestamp: Any? = null           // Can be Timestamp or String (due to simulator bug)
+) {
+    /** Safely extract timestamp as a Firestore Timestamp */
+    fun safeTimestamp(): Timestamp? {
+        return when (timestamp) {
+            is Timestamp -> timestamp
+            is com.google.firebase.Timestamp -> timestamp
+            is String -> null // Skip invalid string timestamps
+            else -> null
+        }
+    }
+}

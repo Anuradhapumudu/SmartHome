@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -50,12 +51,10 @@ fun FloorPlanGridScreen(
     var selectedDeviceId by remember { mutableStateOf<String?>(null) }
     var pendingAddPosition by remember { mutableStateOf<Pair<Int, Int>?>(null) }
 
-    // Derived: Current device being viewed, always fresh from the 'devices' list
     val selectedDevice = remember(selectedDeviceId, devices) {
         devices.firstOrNull { it.id == selectedDeviceId }
     }
 
-    // Map for fast lookup by grid position
     val deviceMap = remember(devices) {
         devices.associateBy { Pair(it.gridX, it.gridY) }
     }
@@ -69,15 +68,15 @@ fun FloorPlanGridScreen(
                 title = {
                     Column {
                         Text(
-                            text = floorPlan?.name ?: "Floor Plan",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = TealPrimary
+                            text = floorPlan?.name ?: "Layout",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "${devices.size} device${if (devices.size != 1) "s" else ""}",
+                            text = "${devices.size} device${if (devices.size != 1) "s" else ""} connected",
                             style = MaterialTheme.typography.labelSmall,
-                            color = OnSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 },
@@ -86,24 +85,14 @@ fun FloorPlanGridScreen(
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
-                            tint = OnSurface
+                            tint = MaterialTheme.colorScheme.onSurface
                         )
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(containerColor = SurfaceDark)
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { showAddDevice = true },
-                containerColor = TealPrimary,
-                contentColor = BackgroundDark,
-                shape = CircleShape
-            ) {
-                Icon(Icons.Filled.Add, contentDescription = "Add Device")
-            }
-        },
-        containerColor = BackgroundDark
+        containerColor = MaterialTheme.colorScheme.background
     ) { innerPadding ->
 
         Column(
@@ -113,13 +102,11 @@ fun FloorPlanGridScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Device status legend
             DeviceLegend()
 
-            // The interactive grid
             if (isLoading) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = TealPrimary)
+                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
                 }
             } else {
                 FloorPlanGrid(
@@ -134,7 +121,6 @@ fun FloorPlanGridScreen(
         }
     }
 
-    // Device detail bottom sheet
     selectedDevice?.let { device ->
         DeviceDetailSheet(
             device = device,
@@ -149,7 +135,6 @@ fun FloorPlanGridScreen(
         )
     }
 
-    // Add device dialog
     if (showAddDevice) {
         AddDeviceDialog(
             occupiedPositions = occupiedPositions,
@@ -167,10 +152,6 @@ fun FloorPlanGridScreen(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Grid composable
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun FloorPlanGrid(
     deviceMap: Map<Pair<Int, Int>, Device>,
@@ -184,39 +165,29 @@ private fun FloorPlanGrid(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(cellSize * GRID_ROWS)
-                .clip(RoundedCornerShape(16.dp))
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(SurfaceDark, CardDark)
-                    )
-                )
+                .clip(RoundedCornerShape(12.dp))
+                .background(MaterialTheme.colorScheme.surface)
                 .border(
                     width = 1.dp,
-                    color = TealPrimary.copy(alpha = 0.2f),
-                    shape = RoundedCornerShape(16.dp)
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f),
+                    shape = RoundedCornerShape(12.dp)
                 )
         ) {
-            // Draw grid lines
             for (row in 0..GRID_ROWS) {
                 HorizontalDivider(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .offset(y = cellSize * row),
-                    color = OnSurfaceVariant.copy(alpha = 0.06f),
-                    thickness = 1.dp
+                    modifier = Modifier.fillMaxWidth().offset(y = cellSize * row),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                    thickness = 0.5.dp
                 )
             }
             for (col in 0..GRID_COLUMNS) {
                 VerticalDivider(
-                    modifier = Modifier
-                        .fillMaxHeight()
-                        .offset(x = cellSize * col),
-                    color = OnSurfaceVariant.copy(alpha = 0.06f),
-                    thickness = 1.dp
+                    modifier = Modifier.fillMaxHeight().offset(x = cellSize * col),
+                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.15f),
+                    thickness = 0.5.dp
                 )
             }
 
-            // Draw devices at their positions
             for (row in 0 until GRID_ROWS) {
                 for (col in 0 until GRID_COLUMNS) {
                     val pos = Pair(col, row)
@@ -237,6 +208,13 @@ private fun FloorPlanGrid(
                     ) {
                         if (device != null) {
                             DeviceCell(device = device, cellSize = cellSize)
+                        } else {
+                            Icon(
+                                imageVector = Icons.Outlined.Add,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f),
+                                modifier = Modifier.size(cellSize * 0.3f)
+                            )
                         }
                     }
                 }
@@ -245,81 +223,51 @@ private fun FloorPlanGrid(
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Individual grid cell with device icon
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun DeviceCell(device: Device, cellSize: Dp) {
     val isOn = device.status == DeviceStatus.ON.name
-    val iconSize = (cellSize.value * 0.45f).dp
-    val dotSize = (cellSize.value * 0.18f).dp
-
-    // Pulse animation when ON
-    val infiniteTransition = rememberInfiniteTransition(label = "pulse_${device.id}")
-    val pulseScale by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = if (isOn) 1.08f else 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = EaseInOutSine),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse_scale"
-    )
+    val iconSize = (cellSize.value * 0.4f).dp
 
     Box(
         modifier = Modifier
-            .size(cellSize * 0.82f)
-            .scale(pulseScale)
-            .clip(RoundedCornerShape((cellSize.value * 0.22f).dp))
+            .size(cellSize * 0.85f)
+            .clip(RoundedCornerShape(8.dp))
             .background(
-                if (isOn) statusColor(device.status).copy(alpha = 0.18f)
-                else CardDark
+                if (isOn) statusColor(device.status).copy(alpha = 0.1f)
+                else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
             )
             .border(
                 width = 1.dp,
-                color = if (isOn) statusColor(device.status).copy(alpha = 0.6f)
-                else OnSurfaceVariant.copy(alpha = 0.2f),
-                shape = RoundedCornerShape((cellSize.value * 0.22f).dp)
+                color = if (isOn) statusColor(device.status).copy(alpha = 0.3f)
+                else MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.2f),
+                shape = RoundedCornerShape(8.dp)
             ),
         contentAlignment = Alignment.Center
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
-        ) {
-            Icon(
-                imageVector = deviceTypeIcon(device.deviceType()),
-                contentDescription = device.name,
-                tint = if (isOn) statusColor(device.status) else OnSurfaceVariant,
-                modifier = Modifier.size(iconSize)
-            )
-        }
+        Icon(
+            imageVector = deviceTypeIcon(device.deviceType()),
+            contentDescription = device.name,
+            tint = if (isOn) statusColor(device.status) else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            modifier = Modifier.size(iconSize)
+        )
 
-        // Status dot — top right corner
         Box(
             modifier = Modifier
-                .size(dotSize)
+                .size(6.dp)
                 .clip(CircleShape)
                 .background(statusColor(device.status))
-                .border(1.dp, SurfaceDark, CircleShape)
                 .align(Alignment.TopEnd)
-                .offset(x = (-2).dp, y = 2.dp)
+                .offset(x = (-4).dp, y = 4.dp)
         )
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Legend
-// ─────────────────────────────────────────────────────────────────────────────
-
 @Composable
 private fun DeviceLegend() {
     val items = listOf(
-        StatusOn to "ON",
-        StatusOff to "OFF",
-        StatusError to "ERROR",
-        StatusDisconnected to "N/A"
+        SoftGreen to "On",
+        SoftGrey to "Off",
+        SoftRed to "Error"
     )
     Row(
         horizontalArrangement = Arrangement.spacedBy(16.dp),
@@ -328,18 +276,18 @@ private fun DeviceLegend() {
         items.forEach { (color, label) ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
                 Box(
                     modifier = Modifier
-                        .size(8.dp)
+                        .size(6.dp)
                         .clip(CircleShape)
                         .background(color)
                 )
                 Text(
                     text = label,
-                    style = MaterialTheme.typography.labelSmall,
-                    color = OnSurfaceVariant
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
