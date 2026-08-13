@@ -337,7 +337,7 @@ private fun MultiSwitchControls(device: Device, onSwitchToggle: (Int) -> Unit) {
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Text(
-            "Individual Gangs",
+            "Individually Addressable Switches",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )

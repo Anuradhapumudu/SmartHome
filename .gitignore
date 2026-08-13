@@ -14,3 +14,8 @@
 .cxx
 local.properties
 READEME.txt
+
+# Firebase & Secrets (Private keys - DO NOT COMMIT)
+app/google-services.json
+simulator/config.js
+secrets.properties

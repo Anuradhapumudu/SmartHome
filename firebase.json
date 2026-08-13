@@ -11,6 +11,21 @@
       ]
     }
   ],
+  "hosting": {
+    "public": "simulator",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**",
+      "config.js.template"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
   "firestore": {
     "rules": "firestore.rules"
   }

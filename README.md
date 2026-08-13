@@ -1,5 +1,23 @@
 # SCS 3311: Smart Home Monitoring & Control System — Project Guide
 
+## 🤝 Collaborative Setup (Quick Start)
+
+To collaborate with friends, follow these steps after cloning the repository:
+
+### 1. Web Simulator Setup
+- Navigate to the `simulator/` directory.
+- Copy `config.js.template` to a new file named `config.js`.
+- Replace the placeholders with your own Firebase project keys.
+- **Run locally**: Since the page uses JS modules, you must use a local server. Run `npx serve simulator` or use the "Live Server" extension in VS Code.
+
+### 2. Android App Setup
+- Navigate to the `app/` directory.
+- Copy `google-services.json.template` to `google-services.json`.
+- Populate it with your Firebase project's configuration.
+- Copy `secrets.properties.template` (in the root) to `secrets.properties` and add any required API keys.
+
+---
+
 ## Project Overview
 
 Build a mobile Smart Home Monitoring and Control system consisting of:
@@ -192,6 +210,13 @@ The **Hardware Simulator** (`simulator/index.html`) is a single-page web app tha
 3. On floor plan select → `onSnapshot` on `floorPlans/{id}/devices` → grid rendered
 4. On device click → right-side detail panel expands with type-specific controls
 5. `onSnapshot` on `usageLogs` (limit 100, ordered by timestamp desc) → log panel
+
+#### Hosting the Simulator
+To make your simulator accessible to friends via a live URL:
+1. Ensure you have the Firebase CLI installed: `npm install -g firebase-tools`
+2. Login: `firebase login`
+3. Deploy: `firebase deploy --only hosting`
+4. Firebase will provide a URL like `https://your-project-id.web.app`.
 
 ---
 

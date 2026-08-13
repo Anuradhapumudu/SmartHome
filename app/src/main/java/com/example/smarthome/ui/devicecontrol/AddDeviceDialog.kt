@@ -239,11 +239,11 @@ private fun DeviceTypeSelector(
     onSelect: (DeviceType) -> Unit
 ) {
     val types = listOf(
-        DeviceType.OUTLET to "Power",
-        DeviceType.MULTI_SWITCH to "Gang",
-        DeviceType.IRON to "Safety",
-        DeviceType.LIGHT to "Bulb",
-        DeviceType.CAMERA to "Vision"
+        DeviceType.OUTLET to "Outlet",
+        DeviceType.MULTI_SWITCH to "Multi-Switch",
+        DeviceType.IRON to "Safety Iron",
+        DeviceType.LIGHT to "Lighting",
+        DeviceType.CAMERA to "Security Cam"
     )
     Row(
         modifier = Modifier.fillMaxWidth(),
