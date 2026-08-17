@@ -452,8 +452,11 @@ private fun StatusChip(status: String) {
 
 @Composable
 private fun TypeBadge(type: DeviceType) {
-    val displayType = type.name.lowercase().replaceFirstChar { 
-        if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString() 
+    val displayType = when (type) {
+        DeviceType.LIGHT -> "Bulb"
+        else -> type.name.lowercase().replaceFirstChar {
+            if (it.isLowerCase()) it.titlecase(Locale.getDefault()) else it.toString()
+        }
     }
     Text(
         text = displayType,
