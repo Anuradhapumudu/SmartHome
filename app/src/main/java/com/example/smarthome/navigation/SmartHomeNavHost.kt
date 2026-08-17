@@ -69,13 +69,11 @@ fun SmartHomeNavHost(
     )
 
     SmartHomeTheme(darkTheme = isDarkMode) {
-        // Absolute root container to ensure background is always correct
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
             if (authUser == null) {
-                // Auth Flow - No Drawer/Scaffold needed here
                 NavHost(
                     navController = navController,
                     startDestination = Routes.LOGIN
@@ -102,7 +100,6 @@ fun SmartHomeNavHost(
                     }
                 }
             } else {
-                // Authenticated Flow - Unified Root Scaffold
                 ModalNavigationDrawer(
                     drawerState = drawerState,
                     gesturesEnabled = isRootScreen,

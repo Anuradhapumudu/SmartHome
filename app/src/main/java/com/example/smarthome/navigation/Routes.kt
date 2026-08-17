@@ -1,8 +1,5 @@
 package com.example.smarthome.navigation
 
-/**
- * All navigation routes in the app.
- */
 object Routes {
     const val LOGIN = "login"
     const val SIGNUP = "signup"

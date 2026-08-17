@@ -10,16 +10,6 @@ import androidx.core.app.NotificationCompat
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
 
-/**
- * Handles FCM push notifications sent by the iron-safety Cloud Function.
- *
- * When the Cloud Function detects an iron has exceeded max_on_duration it:
- *  1. Flips the Firestore device status to OFF
- *  2. Writes a usageLogs entry with event = "CUTOFF"
- *  3. Sends an FCM notification to this app
- *
- * This service shows a heads-up notification so the user is immediately aware.
- */
 class SmartHomeMessagingService : FirebaseMessagingService() {
 
     companion object {
@@ -31,16 +21,12 @@ class SmartHomeMessagingService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         Log.d(TAG, "FCM token refreshed: $token")
-        // In a real multi-user system you'd persist this token to Firestore.
-        // For this project the Cloud Functions target all registered tokens
-        // (or use a device-group / topic approach).
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
         super.onMessageReceived(message)
         Log.d(TAG, "FCM message from ${message.from}")
 
-        // Prefer data payload (sent by Cloud Function) over notification payload
         val title = message.data["title"]
             ?: message.notification?.title
             ?: "⚠ Smart Home Alert"
@@ -51,12 +37,9 @@ class SmartHomeMessagingService : FirebaseMessagingService() {
         showHeadsUpNotification(title, body)
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-
     private fun showHeadsUpNotification(title: String, body: String) {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
 
-        // Create the channel (idempotent on Android 8+)
         val channel = NotificationChannel(
             CHANNEL_ID,
             CHANNEL_NAME,
@@ -68,7 +51,6 @@ class SmartHomeMessagingService : FirebaseMessagingService() {
         }
         manager.createNotificationChannel(channel)
 
-        // Tap on notification → open MainActivity
         val intent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
         }

@@ -7,7 +7,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-// Use system default sans-serif (similar to Inter) — no network call needed
 val SmartHomeTypography = Typography(
     displayLarge = TextStyle(
         fontWeight = FontWeight.Bold,

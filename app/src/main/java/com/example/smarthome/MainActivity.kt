@@ -30,13 +30,8 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
 
-        // ── Request notification permission (Android 13+) ──────────────────
         askNotificationPermission()
 
-        // ── Subscribe to FCM topic for iron-safety alerts ──────────────────
-        // The Cloud Function sends to "smarthome_alerts" topic when an iron
-        // is automatically cut off. This subscription makes sure this device
-        // receives those heads-up notifications.
         FirebaseMessaging.getInstance().subscribeToTopic("smarthome_alerts")
             .addOnCompleteListener { task ->
                 if (task.isSuccessful) {
@@ -54,7 +49,6 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun askNotificationPermission() {
-        // POST_NOTIFICATIONS is only required on Android 13 (API 33)+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val granted = ContextCompat.checkSelfPermission(
                 this,

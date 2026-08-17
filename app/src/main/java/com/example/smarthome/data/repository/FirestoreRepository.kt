@@ -14,14 +14,6 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
 
-/**
- * Single source of truth for all Firestore read/write operations.
- *
- * Collection structure:
- *   floorPlans/{id}
- *     └─ devices/{id}
- *   usageLogs/{id}
- */
 class FirestoreRepository {
 
     private val db = FirebaseFirestore.getInstance()
@@ -31,21 +23,13 @@ class FirestoreRepository {
 
     private val currentUid get() = auth.currentUser?.uid ?: ""
 
-    // ──────────────────────────────────────────────────────────
-    // FLOOR PLANS
-    // ──────────────────────────────────────────────────────────
-
-    /**
-     * Real-time stream of all floor plans for the current user.
-     * Automatically updates when Firestore changes.
-     */
     fun observeFloorPlans(): Flow<List<FloorPlan>> = callbackFlow {
         val registration: ListenerRegistration = floorPlansRef
             .whereEqualTo("userId", currentUid)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     Log.e("FirestoreRepo", "observeFloorPlans error", error)
-                    trySend(emptyList()) // Ensure the flow doesn't hang
+                    trySend(emptyList())
                     return@addSnapshotListener
                 }
                 val plans = snapshot?.documents?.mapNotNull { doc ->
@@ -70,13 +54,6 @@ class FirestoreRepository {
         floorPlansRef.document(floorPlanId).delete().await()
     }
 
-    // ──────────────────────────────────────────────────────────
-    // DEVICES
-    // ──────────────────────────────────────────────────────────
-
-    /**
-     * Real-time stream of all devices on a specific floor plan.
-     */
     fun observeDevices(floorPlanId: String): Flow<List<Device>> = callbackFlow {
         val devicesRef = floorPlansRef.document(floorPlanId).collection("devices")
         val registration: ListenerRegistration = devicesRef
@@ -93,9 +70,6 @@ class FirestoreRepository {
         awaitClose { registration.remove() }
     }
 
-    /**
-     * Real-time stream of a single device document.
-     */
     fun observeDevice(floorPlanId: String, deviceId: String): Flow<Device?> = callbackFlow {
         val docRef = floorPlansRef
             .document(floorPlanId)
@@ -130,10 +104,6 @@ class FirestoreRepository {
         docRef.set(device).await()
     }
 
-    /**
-     * Toggles the top-level status of a device (ON ↔ OFF).
-     * Also writes lastTurnedOnAt for IRON devices when turning ON.
-     */
     suspend fun toggleDeviceStatus(floorPlanId: String, device: Device) {
         val newStatus = if (device.status == DeviceStatus.ON.name)
             DeviceStatus.OFF.name else DeviceStatus.ON.name
@@ -147,20 +117,15 @@ class FirestoreRepository {
             "status" to newStatus
         )
 
-        // For iron devices, record the time they were turned on
         if (device.type == "IRON" && newStatus == DeviceStatus.ON.name) {
             updates["lastTurnedOnAt"] = Timestamp.now()
         }
 
         docRef.update(updates).await()
 
-        // Log the toggle event
         logUsage(device, floorPlanId, newStatus)
     }
 
-    /**
-     * Updates a single child switch inside a MULTI_SWITCH unit.
-     */
     suspend fun updateMultiSwitch(
         floorPlanId: String,
         deviceId: String,
@@ -181,10 +146,6 @@ class FirestoreRepository {
             .delete()
             .await()
     }
-
-    // ──────────────────────────────────────────────────────────
-    // USAGE LOGS
-    // ──────────────────────────────────────────────────────────
 
     fun observeUsageLogs(limitDays: Int = 7): Flow<List<UsageLog>> = callbackFlow {
         val registration: ListenerRegistration = usageLogsRef

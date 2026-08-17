@@ -12,13 +12,11 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import java.util.Calendar
 
-/** Data for a single bar in the 7-day chart. */
 data class DayUsage(
-    val dayLabel: String,   // "Mon", "Tue" …
-    val minutesOn: Int      // total ON-minutes that day
+    val dayLabel: String,
+    val minutesOn: Int
 )
 
-/** Per-device summary shown as a summary card. */
 data class DeviceSummary(
     val deviceId: String,
     val deviceName: String,
@@ -32,14 +30,11 @@ class ReportingViewModel : ViewModel() {
 
     private val repository = FirestoreRepository()
 
-    // ── raw logs ────────────────────────────────────────────────────────────
     private val _allLogs = MutableStateFlow<List<UsageLog>>(emptyList())
 
-    // ── filter chip ─────────────────────────────────────────────────────────
     private val _selectedFilter = MutableStateFlow<String?>(null)
     val selectedFilter: StateFlow<String?> = _selectedFilter.asStateFlow()
 
-    // ── exposed state ────────────────────────────────────────────────────────
     private val _filteredLogs = MutableStateFlow<List<UsageLog>>(emptyList())
     val filteredLogs: StateFlow<List<UsageLog>> = _filteredLogs.asStateFlow()
 
@@ -60,7 +55,6 @@ class ReportingViewModel : ViewModel() {
                 recompute(logs, _selectedFilter.value)
             }
         }
-        // Recompute whenever filter changes
         viewModelScope.launch {
             combine(_allLogs, _selectedFilter) { logs, filter ->
                 Pair(logs, filter)
@@ -82,13 +76,11 @@ class ReportingViewModel : ViewModel() {
 
         _filteredLogs.value = filtered
 
-        // ── 7-day chart: bucket ON events by day ─────────────────────────
         val calendar = Calendar.getInstance()
-        val dayBuckets = mutableMapOf<Int, Int>() // dayOfYear → minutes ON
+        val dayBuckets = mutableMapOf<Int, Int>() 
         val dayLabels = mutableMapOf<Int, String>()
         val dayNames = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
-        // Fill last 7 days with 0
         for (offset in 6 downTo 0) {
             val c = Calendar.getInstance()
             c.add(Calendar.DAY_OF_YEAR, -offset)
@@ -97,8 +89,7 @@ class ReportingViewModel : ViewModel() {
             dayLabels[doy] = dayNames[c.get(Calendar.DAY_OF_WEEK) - 1]
         }
 
-        // Pair consecutive ON→OFF events per device to get duration
-        val onEvents = mutableMapOf<String, Long>() // deviceId → turnedOnMs
+        val onEvents = mutableMapOf<String, Long>() 
         logs.sortedBy { it.safeTimestamp()?.seconds ?: 0L }.forEach { log ->
             val ts = log.safeTimestamp()?.seconds?.times(1000) ?: return@forEach
             when (log.event) {
@@ -122,7 +113,6 @@ class ReportingViewModel : ViewModel() {
             DayUsage(dayLabels[doy] ?: "?", dayBuckets[doy] ?: 0)
         }
 
-        // ── per-device summaries ─────────────────────────────────────────
         val todayStart = Calendar.getInstance().apply {
             set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
             set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
@@ -150,7 +140,6 @@ class ReportingViewModel : ViewModel() {
         logs.sortedBy { it.safeTimestamp()?.seconds ?: 0L }.forEach { log ->
             val ts = (log.safeTimestamp()?.seconds ?: 0L) * 1000
             if (ts < todayStart) {
-                // before today — track ON state
                 when (log.event) {
                     "ON", "SCHEDULE_ON" -> onTs = ts
                     "OFF", "CUTOFF", "SCHEDULE_OFF" -> onTs = null
@@ -168,7 +157,6 @@ class ReportingViewModel : ViewModel() {
                 }
             }
         }
-        // If still ON, count until now
         onTs?.let { start ->
             val startMs = if (start < todayStart) todayStart else start
             total += (System.currentTimeMillis() - startMs) / 60_000
