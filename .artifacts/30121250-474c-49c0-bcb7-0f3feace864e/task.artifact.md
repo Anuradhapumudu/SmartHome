@@ -1,7 +1,0 @@
-- [x] Update `AddDeviceDialog.kt`
-    - [x] Rename "Lighting" to "Bulb"
-    - [x] Reorder `DeviceType.LIGHT` to second position
-    - [x] Add horizontal scroll to `DeviceTypeSelector`
-- [x] Update `DeviceDetailSheet.kt`
-    - [x] Update `TypeBadge` for `DeviceType.LIGHT`
-- [x] Verify changes
